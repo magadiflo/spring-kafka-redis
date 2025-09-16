@@ -98,3 +98,30 @@ Creamos el proyecto `news-service` desde spring initializr con las siguientes de
 > `Nota`: usamos `spring-boot-starter-data-redis-reactive` porque `WebFlux` está basado en el paradigma reactivo. Esto
 > garantiza operaciones no bloqueantes también en el acceso a `Redis`.
 
+## Configuración de News Service
+
+Definimos las configuraciones básicas para que nuestro `news-service` pueda conectarse a `Kafka` y a `Redis`.
+
+````yml
+server:
+  port: 8080
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: news-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+````
+
+Explicación:
+
+- `spring.kafka.bootstrap-servers`: indica la dirección de los `brokers de Kafka`.
+- `spring.data.redis`: define las credenciales de acceso a `Redis`.
+- El uso de variables de entorno (`${...}`) permite mayor portabilidad entre entornos (desarrollo, staging, producción).
