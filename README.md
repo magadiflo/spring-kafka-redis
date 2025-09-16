@@ -125,3 +125,159 @@ Explicación:
 - `spring.kafka.bootstrap-servers`: indica la dirección de los `brokers de Kafka`.
 - `spring.data.redis`: define las credenciales de acceso a `Redis`.
 - El uso de variables de entorno (`${...}`) permite mayor portabilidad entre entornos (desarrollo, staging, producción).
+
+## Configuración de Producer y Topic en Kafka
+
+Para que el `News Service` pueda publicar mensajes en `Kafka`, es necesario configurar un `Producer` y definir el
+`Topic` donde se enviarán dichos mensajes.
+
+A continuación, se muestran las clases de configuración:
+
+### Configuración del Producer
+
+En esta clase se define el `ProducerFactory` y el `KafkaTemplate`.
+
+- El `ProducerFactory` se encarga de crear instancias de productores con las propiedades definidas.
+- El `KafkaTemplate` es el componente que abstrae y simplifica el envío de mensajes a `Kafka`.
+
+````java
+
+@Configuration
+public class KafkaProducerConfig {
+
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrapServers;
+
+    // Propiedades del Producer
+    public Map<String, Object> producerConfig() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, this.bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        return props;
+    }
+
+    // Crea el ProducerFactory
+    @Bean
+    public ProducerFactory<String, String> producerFactory() {
+        return new DefaultKafkaProducerFactory<>(this.producerConfig());
+    }
+
+    // Define el KafkaTemplate para enviar mensajes
+    @Bean
+    public KafkaTemplate<String, String> kafkaTemplate(ProducerFactory<String, String> producerFactory) {
+        return new KafkaTemplate<>(producerFactory);
+    }
+}
+````
+
+### Definiendo constantes
+
+En esta clase de utilidad creamos las constantes que estaremos usando en nuestra aplicación.
+
+````java
+
+@UtilityClass
+public class Constants {
+    public static final String TOPIC_NAME = "news-topic";
+    public static final String DATE_FORMAT = "^\\d{4}-\\d{2}-\\d{2}$";
+    public static final String DATE_NOT_BLANK_MESSAGE = "El parámetro de solicitud de fecha no puede estar vacío o nulo";
+    public static final String DATE_PATTERN_MESSAGE = "La fecha debe estar en el formato yyyy-MM-dd";
+    public static final String DATA_FOUND_MESSAGE = "Datos encontrados";
+    public static final String DATA_NOT_FOUND_MESSAGE = "La noticia solicitada aún no está disponible. Su solicitud está siendo procesada, intente nuevamente en unos segundos";
+}
+````
+
+### Configuración del Topic
+
+En esta clase se define el topic `news-topic`, el cual será creado automáticamente al iniciar la aplicación si no
+existe en el cluster de `Kafka`.
+
+````java
+
+@Configuration
+public class KafkaTopicConfig {
+    @Bean
+    public NewTopic generateTopic() {
+        return TopicBuilder.name(Constants.TOPIC_NAME).build();
+    }
+}
+````
+
+> 📌 `Nota`: Esta configuración es suficiente para entornos de desarrollo o pruebas. En entornos productivos, es
+> recomendable especificar explícitamente el `número de particiones` y `réplicas` para garantizar escalabilidad y
+> tolerancia a fallos.
+
+## Configuración de Redis en news-service
+
+En el `News Service`, se utiliza `Spring Data Redis Reactive` junto con el cliente `Lettuce` para interactuar con
+`Redis` de manera reactiva.
+
+Esto permite realizar operaciones no bloqueantes, algo muy útil en aplicaciones basadas en `Spring WebFlux`.
+
+````java
+
+@Configuration
+public class RedisConfig {
+    @Value("${spring.data.redis.host}")
+    private String redisHost;
+
+    @Value("${spring.data.redis.port}")
+    private Integer redisPort;
+
+    @Value("${spring.data.redis.password}")
+    private String redisPassword;
+
+    // Configuración de conexión
+    @Bean
+    public ReactiveRedisConnectionFactory reactiveRedisConnectionFactory() {
+        var redisStandaloneConfiguration = new RedisStandaloneConfiguration();
+        redisStandaloneConfiguration.setHostName(Objects.requireNonNull(this.redisHost));
+        redisStandaloneConfiguration.setPort(Objects.requireNonNull(this.redisPort));
+        redisStandaloneConfiguration.setPassword(Objects.requireNonNull(this.redisPassword));
+        return new LettuceConnectionFactory(redisStandaloneConfiguration);
+    }
+
+    // Configuración del template reactivo con serializadores
+    @Bean
+    public ReactiveRedisOperations<String, Object> reactiveRedisOperations(ReactiveRedisConnectionFactory reactiveRedisConnectionFactory) {
+        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(Object.class); // Para serializar el value
+        RedisSerializationContext.RedisSerializationContextBuilder<String, Object> builder =
+                RedisSerializationContext.newSerializationContext(new StringRedisSerializer()); // Para serializar la key
+        RedisSerializationContext<String, Object> context = builder
+                .value(serializer)
+                .hashKey(serializer)
+                .hashValue(serializer)
+                .build();
+        return new ReactiveRedisTemplate<>(reactiveRedisConnectionFactory, context);
+    }
+}
+````
+
+Explicación paso a paso
+
+1. `Propiedades externas`
+    - `spring.data.redis.host` → Dirección del servidor Redis.
+    - `spring.data.redis.port` → Puerto de Redis.
+    - `spring.data.redis.password` → Contraseña (si está configurada en Redis).
+
+   Estas propiedades se inyectan desde el `application.yml`.
+
+2. `ReactiveRedisConnectionFactory`
+    - Se crea una instancia de `RedisStandaloneConfiguration` para indicar `host`, `puerto` y `password`.
+    - Se usa `LettuceConnectionFactory`, que es el driver por defecto recomendado para `Redis` en entornos reactivos.
+    - Este `ConnectionFactory` será la encargada de abrir conexiones reactivas hacia Redis.
+
+3. `ReactiveRedisOperations`
+    - Se construye un `ReactiveRedisTemplate`, que es el componente principal para interactuar con Redis de forma
+      reactiva.
+    - Para serializar las `keys`, se usa `StringRedisSerializer`.
+    - Para serializar los `values` y objetos más complejos, se usa `Jackson2JsonRedisSerializer<Object>`.
+    - También se configuran las serializaciones de `hashKey` y `hashValue` para soportar estructuras de tipo `Hash`
+      en `Redis`.
+
+En pocas palabras:
+
+- `Keys` → guardadas como String.
+- `Values` → guardados en formato JSON (gracias a `Jackson`).
+
