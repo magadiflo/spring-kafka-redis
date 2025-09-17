@@ -281,3 +281,117 @@ En pocas palabras:
 - `Keys` → guardadas como String.
 - `Values` → guardados en formato JSON (gracias a `Jackson`).
 
+## Creación del DAO para acceder a Redis
+
+Para mantener una separación clara entre la lógica de negocio y el acceso a datos, se implementa un
+`DAO (Data Access Object)` que encapsula las operaciones contra `Redis`. De esta forma, la aplicación puede
+interactuar con la caché sin acoplarse directamente a la `API` de `ReactiveRedisOperations`.
+
+### Interfaz NewsDao
+
+La interfaz define las operaciones disponibles para acceder a las noticias en `Redis`. En este caso, únicamente se
+consulta si existe una noticia asociada a una fecha específica.
+
+````java
+public interface NewsDao {
+    Mono<Object> getNews(String date);
+}
+````
+
+- `Mono<Object>` → dado que estamos en un contexto reactivo, el método devuelve un `Mono`, que representa un valor
+  asíncrono (puede contener la noticia o estar vacío si no existe en `Redis`).
+- `String date` → se usa la fecha como clave en `Redis`. En un caso real, podría considerarse un identificador más
+  rico (ej. `news:2025-09-16`) para evitar colisiones.
+
+### Implementación NewsDaoImpl
+
+La implementación utiliza el `ReactiveRedisOperations` configurado previamente para interactuar con `Redis`.
+
+````java
+
+@RequiredArgsConstructor
+@Repository
+public class NewsDaoImpl implements NewsDao {
+
+    private final ReactiveRedisOperations<String, Object> reactiveRedisOperations;
+
+    @Override
+    public Mono<Object> getNews(String date) {
+        return this.reactiveRedisOperations.opsForValue().get(date);
+    }
+}
+````
+
+- `@Repository` → marca la clase como componente de acceso a datos.
+- `@RequiredArgsConstructor (Lombok)` → genera automáticamente un constructor con los argumentos final, en este caso
+  `reactiveRedisOperations`.
+- `opsForValue().get(date)` → obtiene el valor almacenado en `Redis` para la clave proporcionada (la fecha).
+
+## Servicio de Noticias (`NewsService`)
+
+El servicio se encarga de:
+
+1. Consultar `Redis` para ver si la noticia solicitada ya está disponible.
+2. Si la encuentra `(cache HIT)` → devolverla al cliente.
+3. Si no existe `(cache MISS)` → publicar un mensaje en `Kafka` para que el `worker-service` procese la solicitud y
+   obtenga la noticia desde la API externa.
+
+### Interfaz
+
+````java
+public interface NewsService {
+    Mono<Object> getNews(String date);
+
+    Mono<Void> publishToMessageBroker(String date);
+}
+````
+
+- `getNews(String date)`: consulta si existe la noticia en `Redis`, y si no, dispara el flujo de publicación a `Kafka`.
+- `publishToMessageBroker(String date)`: envía un mensaje al `topic` de `Kafka` con la fecha solicitada.
+
+> ⚠️ `Nota`: por ahora el retorno es `Mono<Object>`, pero cuando tengamos el DTO definido conviene tipar la respuesta
+> `(Mono<NewsDto>)` para trabajar de manera más segura.
+
+### Implementación
+
+````java
+
+@Slf4j
+@RequiredArgsConstructor
+@Service
+public class NewsServiceImpl implements NewsService {
+
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final NewsDao newsDao;
+
+    @Override
+    public Mono<Object> getNews(String date) {
+        return this.newsDao.getNews(date)
+                .doOnNext(value -> log.info("Cache HIT - Obteniendo desde Redis para fecha: {}", value))
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("Cache MISS - Publicando fecha {} en Kafka", date);
+                    return this.publishToMessageBroker(date);
+                }));
+    }
+
+    @Override
+    public Mono<Void> publishToMessageBroker(String date) {
+        Message<String> message = MessageBuilder
+                .withPayload(date)
+                .setHeader(KafkaHeaders.TOPIC, Constants.TOPIC_NAME)
+                .build();
+        return Mono.fromFuture(() -> this.kafkaTemplate.send(message))
+                .then();
+    }
+}
+````
+
+Explicación del flujo
+
+1. `newsDao.getNews(date)` → busca la noticia en Redis.
+2. Si existe:
+    - Se loguea `Cache HIT`.
+    - Se devuelve directamente el valor encontrado.
+3. Si no existe:
+    - Se loguea Cache MISS.
+    - Se invoca `publishToMessageBroker(date)`, que construye un mensaje y lo envía a `Kafka`.
