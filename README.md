@@ -51,7 +51,7 @@ diferente para propósitos de práctica y aprendizaje:
 De esta forma, aunque ambos microservicios comparten la misma instancia de `Redis` como sistema de caché centralizado,
 cada uno lo hace con un cliente distinto, lo que enriquece el aprendizaje y la comparación entre enfoques.
 
-## Creando proyecto: [news-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=news-service&name=news-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.news.app&dependencies=webflux,lombok,data-redis-reactive,kafka)
+## Creando proyecto: [news-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=news-service&name=news-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.news.app&dependencies=webflux,lombok,data-redis-reactive,kafka,validation)
 
 Creamos el proyecto `news-service` desde spring initializr con las siguientes dependencias.
 
@@ -62,6 +62,10 @@ Creamos el proyecto `news-service` desde spring initializr con las siguientes de
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
     <dependency>
         <groupId>org.springframework.boot</groupId>
@@ -184,7 +188,7 @@ public class Constants {
     public static final String DATE_NOT_BLANK_MESSAGE = "El parámetro de solicitud de fecha no puede estar vacío o nulo";
     public static final String DATE_PATTERN_MESSAGE = "La fecha debe estar en el formato yyyy-MM-dd";
     public static final String DATA_FOUND_MESSAGE = "Datos encontrados";
-    public static final String DATA_NOT_FOUND_MESSAGE = "La noticia solicitada aún no está disponible. Su solicitud está siendo procesada, intente nuevamente en unos segundos";
+    public static final String DATA_NOT_FOUND_MESSAGE = "La noticia solicitada para la fecha [%s] aún no está disponible. Por favor, intente nuevamente en unos momentos";
 }
 ````
 
@@ -395,3 +399,66 @@ Explicación del flujo
 3. Si no existe:
     - Se loguea Cache MISS.
     - Se invoca `publishToMessageBroker(date)`, que construye un mensaje y lo envía a `Kafka`.
+
+## 🧭 Catálogo de errores de negocio en APIs (`ErrorCatalog`)
+
+En arquitecturas modernas de backend, especialmente en APIs REST, es común complementar los códigos HTTP estándar
+con un `catálogo de errores de negocio`. Este catálogo permite identificar con precisión el origen del error, facilitar
+la trazabilidad en observabilidad, y ofrecer mensajes claros y consistentes a los consumidores de la API.
+
+### 🎯 Propósito del catálogo
+
+El `enum` `ErrorCatalog` centraliza los errores que pueden ocurrir en la lógica de negocio o en validaciones
+específicas. Cada entrada del catálogo contiene:
+
+- `code`: Identificador único del error, siguiendo una convención definida por el equipo (e.g. `NEWS_MS_001`).
+- `message`: Descripción legible del error, útil para mostrar al cliente o registrar en logs.
+
+Esto permite desacoplar los errores técnicos del protocolo HTTP de los errores funcionales del dominio.
+
+### 🧱 Ejemplo de implementación
+
+````java
+
+@Getter
+@RequiredArgsConstructor
+public enum ErrorCatalog {
+
+    INVALID_PARAMETERS("NEWS_MS_001", "Parámetro de solicitud de fecha no válido"),
+    INTERVAL_SERVER_ERROR("NEWS_MS_002", "Error Interno del Servidor");
+
+    private final String code;
+    private final String message;
+}
+````
+
+### 🔍 Diferencias entre errores HTTP y errores de negocio
+
+| Aspecto                        | Código HTTP (`400`, `500`, etc.) | Código de catálogo (`NEWS_MS_001`)             |
+|--------------------------------|----------------------------------|------------------------------------------------|
+| Propósito                      | Indicar tipo de error técnico    | Identificar error específico de negocio        |
+| Granularidad                   | Limitada                         | Detallada y extensible                         |
+| Trazabilidad en observabilidad | Difícil de rastrear sin contexto | Fácil de rastrear en logs, dashboards, alertas |
+| Mensaje para el cliente        | Genérico                         | Personalizados y claros                        |
+| Mantenibilidad                 | No versionable                   | Versionable y documentable                     |
+
+### 📦 Ejemplo de respuesta en API
+
+Esta estructura puede acompañar un código `HTTP 400 Bad Request`, pero el code interno permite identificar el error
+exacto en dashboards, logs o alertas.
+
+````json
+{
+  "code": "NEWS_MS_001",
+  "message": "Parámetro de solicitud de fecha no válido"
+}
+````
+
+### 🛠️ Buenas prácticas de diseño
+
+- `Convención de códigos`: Usa prefijos por módulo (NEWS_MS, USER_MS, etc.) y numeración secuencial.
+- `Centralización`: Mantén el catálogo en un único enum o agrúpalo por dominio si crece demasiado.
+- `Versionado`: Documenta los cambios en el catálogo para evitar rupturas en clientes.
+- `Integración con observabilidad`: Expón el code en logs estructurados, trazas y métricas.
+- `Mensajes legibles`: Evita mensajes técnicos crípticos, prioriza claridad para el consumidor.
+

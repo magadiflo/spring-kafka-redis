@@ -9,5 +9,5 @@ public class Constants {
     public static final String DATE_NOT_BLANK_MESSAGE = "El parámetro de solicitud de fecha no puede estar vacío o nulo";
     public static final String DATE_PATTERN_MESSAGE = "La fecha debe estar en el formato yyyy-MM-dd";
     public static final String DATA_FOUND_MESSAGE = "Datos encontrados";
-    public static final String DATA_NOT_FOUND_MESSAGE = "La noticia solicitada aún no está disponible. Su solicitud está siendo procesada, intente nuevamente en unos segundos";
+    public static final String DATA_NOT_FOUND_MESSAGE = "La noticia solicitada para la fecha [%s] aún no está disponible. Por favor, intente nuevamente en unos momentos";
 }
