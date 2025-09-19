@@ -462,3 +462,57 @@ exacto en dashboards, logs o alertas.
 - `Integración con observabilidad`: Expón el code en logs estructurados, trazas y métricas.
 - `Mensajes legibles`: Evita mensajes técnicos crípticos, prioriza claridad para el consumidor.
 
+## DTOs de Respuesta
+
+Para garantizar que la API tenga un contrato consistente tanto en respuestas exitosas como en errores, definimos los
+siguientes DTOs:
+
+### 1. Tipos de Error (ErrorType)
+
+- `FUNCTIONAL` → Por ejemplo, cuando un parámetro no es válido o una noticia solicitada no existe.
+- `SYSTEM` → Por ejemplo, fallas en la comunicación con `Kafka`, `Redis`, o errores internos inesperados.
+
+````java
+public enum ErrorType {
+    FUNCTIONAL, // Errores relacionados con reglas de negocio
+    SYSTEM      // Errores relacionados con el sistema o infraestructura
+}
+````
+
+### 2. Respuesta exitosa (DataResponse)
+
+````java
+public record DataResponse<T>(String message,
+                              Boolean status,
+                              @JsonInclude(JsonInclude.Include.NON_NULL)
+                              T data) {
+}
+````
+
+- `message` → mensaje genérico para el cliente (ej: "Operación exitosa").
+- `status` → indica si la operación fue correcta (true/false).
+- `data` → el contenido real de la respuesta (puede ser un DTO, lista, etc.).
+- ⚠️ `Si data es null`, no se incluye en el JSON gracias a `@JsonInclude(JsonInclude.Include.NON_NULL)`.
+
+### 3. Respuesta de error (ErrorResponse)
+
+````java
+public record ErrorResponse(String code,
+                            String message,
+                            ErrorType errorType,
+                            List<String> details,
+                            LocalDateTime timestamp) {
+}
+````
+
+- `code` → código de error definido en el catálogo (`NEWS_MS_001`, `NEWS_MS_002`, etc.).
+- `message` → descripción breve y clara del error.
+- `errorType` → indica si es un error `FUNCTIONAL` o `SYSTEM`.
+- `details` → lista de detalles adicionales (ej. campos inválidos).
+- `timestamp` → momento exacto en que ocurrió el error.
+
+### ✅ Beneficios de este diseño
+
+- Estandariza las respuestas, tanto exitosas como de error.
+- Facilita el consumo de la API, ya que el cliente sabe siempre qué campos esperar.
+- Permite extender fácilmente la estructura (ej. agregar un campo de requestId en el futuro para trazabilidad).
