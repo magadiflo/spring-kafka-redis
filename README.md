@@ -616,3 +616,45 @@ public class NewsServiceImpl implements NewsService {
     - Si la noticia existe → se devuelve directamente desde Redis.
     - Si no existe → se dispara el flujo asíncrono y el cliente recibe un mensaje claro de que la solicitud está en
       proceso.
+
+## Crea controlador `NewsController`
+
+El controlador expone el endpoint para consultar noticias. Utiliza `NewsService` y retorna un `DataResponse` tipado
+para mantener consistencia en las respuestas.
+
+````java
+
+@Slf4j
+@RequiredArgsConstructor
+@RestController
+@RequestMapping(path = "/api/v1/news")
+public class NewsController {
+
+    private final NewsService newsService;
+
+    @GetMapping
+    public Mono<ResponseEntity<DataResponse<Object>>> getNews(@NotBlank(message = Constants.DATE_NOT_BLANK_MESSAGE)
+                                                              @Pattern(regexp = Constants.DATE_FORMAT, message = Constants.DATE_PATTERN_MESSAGE)
+                                                              @RequestParam(required = false) String date) {
+        return this.newsService.getNews(date)
+                .map(data -> ResponseEntity.ok(new DataResponse<>(Constants.DATA_FOUND_MESSAGE, Boolean.TRUE, data)));
+    }
+}
+````
+
+🔎 Puntos clave
+
+- `Validación de parámetros`
+    - Aunque el parámetro `date` es obligatorio desde el punto de vista funcional, se define con `required = false`.
+    - Esto permite que `Bean Validation` (`@NotBlank`, `@Pattern`) maneje la validación en lugar de que `Spring WebFlux`
+      lo rechace automáticamente.
+        - Si usáramos `required = true` (valor por defecto), cuando no enviemos el parámetro date en el request,
+          `Spring` lanzaría una excepción antes de que nuestras validaciones con `Bean Validation` pudieran aplicarse.
+        - De esta forma tenemos control total sobre los mensajes de error y aseguramos que todas las respuestas se
+          devuelvan en un formato consistente (`ErrorResponse`).
+
+
+- `Respuesta uniforme`. El uso de `DataResponse<T>` estandariza la salida.
+    - Si existe la noticia en Redis → se devuelve con `status = true` y data poblado.
+    - Si no existe → se lanza `NewsNotFoundException`, que más adelante manejaremos en un handler global de excepciones
+      para devolver un `ErrorResponse`.
