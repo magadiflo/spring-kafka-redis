@@ -1,6 +1,7 @@
 package dev.magadiflo.news.app.service.impl;
 
 import dev.magadiflo.news.app.dao.NewsDao;
+import dev.magadiflo.news.app.exceptions.ApplicationExceptions;
 import dev.magadiflo.news.app.service.NewsService;
 import dev.magadiflo.news.app.util.Constants;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +27,8 @@ public class NewsServiceImpl implements NewsService {
                 .doOnNext(value -> log.info("Cache HIT - Obteniendo desde Redis para fecha: {}", value))
                 .switchIfEmpty(Mono.defer(() -> {
                     log.info("Cache MISS - Publicando fecha {} en Kafka", date);
-                    return this.publishToMessageBroker(date);
+                    return this.publishToMessageBroker(date)
+                            .then(ApplicationExceptions.newsNotFound(date));
                 }));
     }
 

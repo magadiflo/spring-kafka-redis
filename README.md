@@ -540,6 +540,7 @@ public class NewsNotFoundException extends RuntimeException {
 ### 2. Fábrica de excepciones: `ApplicationExceptions`
 
 ````java
+
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class ApplicationExceptions {
     public static <T> Mono<T> newsNotFound(String date) {
@@ -559,3 +560,59 @@ public class ApplicationExceptions {
 - Facilita el futuro manejo global con un `@RestControllerAdvice`, devolviendo un `ErrorResponse` consistente al
   cliente.
 
+## Lanzando excepción en servicio `NewsServiceImpl`
+
+Cuando una noticia no se encuentra en `Redis`, ocurren dos acciones encadenadas:
+
+1. Se publica un mensaje en el topic de `Kafka`, para que el `worker-service` procese la solicitud.
+2. Se lanza una excepción `NewsNotFoundException`, que posteriormente será capturada por nuestro handler global de
+   errores y devuelta al cliente en un formato consistente (`ErrorResponse`).
+
+De esta forma:
+
+- El cliente recibe una respuesta inmediata, sin quedar bloqueado esperando a `Kafka`.
+- El `worker-service` se encarga en segundo plano de consultar la API externa y guardar el resultado en `Redis` para
+  futuras peticiones.
+
+````java
+
+@Slf4j
+@RequiredArgsConstructor
+@Service
+public class NewsServiceImpl implements NewsService {
+
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final NewsDao newsDao;
+
+    @Override
+    public Mono<Object> getNews(String date) {
+        return this.newsDao.getNews(date)
+                .doOnNext(value -> log.info("Cache HIT - Obteniendo desde Redis para fecha: {}", value))
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("Cache MISS - Publicando fecha {} en Kafka", date);
+                    return this.publishToMessageBroker(date) // Cuando termine la publicación → lanzamos excepción
+                            .then(ApplicationExceptions.newsNotFound(date));
+                }));
+    }
+
+    @Override
+    public Mono<Void> publishToMessageBroker(String date) {
+        Message<String> message = MessageBuilder
+                .withPayload(date)
+                .setHeader(KafkaHeaders.TOPIC, Constants.TOPIC_NAME)
+                .build();
+        return Mono.fromFuture(() -> this.kafkaTemplate.send(message))
+                .then();
+    }
+}
+````
+
+### 🔎 Puntos clave
+
+- `Mono.defer(...)`: garantiza que la publicación en `Kafka` y la excepción solo se ejecuten si el flujo viene vacío
+  (cache miss).
+- `.then(ApplicationExceptions.newsNotFound(date))`: asegura que la excepción se dispare después de publicar el mensaje.
+- Patrón `Cache-Aside + Event-driven`:
+    - Si la noticia existe → se devuelve directamente desde Redis.
+    - Si no existe → se dispara el flujo asíncrono y el cliente recibe un mensaje claro de que la solicitud está en
+      proceso.
