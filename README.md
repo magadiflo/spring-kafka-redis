@@ -516,3 +516,46 @@ public record ErrorResponse(String code,
 - Estandariza las respuestas, tanto exitosas como de error.
 - Facilita el consumo de la API, ya que el cliente sabe siempre qué campos esperar.
 - Permite extender fácilmente la estructura (ej. agregar un campo de requestId en el futuro para trazabilidad).
+
+## Excepciones personalizadas
+
+En la aplicación definimos excepciones propias para representar errores de negocio de forma clara y controlada. Esto
+permite separar los errores funcionales de los errores técnicos, y facilitar el manejo centralizado de excepciones en
+la capa de controladores.
+
+### 1. Excepción específica: `NewsNotFoundException`
+
+````java
+public class NewsNotFoundException extends RuntimeException {
+    public NewsNotFoundException(String date) {
+        super(Constants.DATA_NOT_FOUND_MESSAGE.formatted(date));
+    }
+}
+````
+
+- Extiende de `RuntimeException`, lo que la hace no chequeada `(unchecked)`.
+- Se lanza cuando una noticia no existe ni en `Redis` ni en la `API externa`.
+- Usa el mensaje predefinido en `Constants.DATA_NOT_FOUND_MESSAGE`, formateado con la fecha solicitada.
+
+### 2. Fábrica de excepciones: `ApplicationExceptions`
+
+````java
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public class ApplicationExceptions {
+    public static <T> Mono<T> newsNotFound(String date) {
+        return Mono.error(() -> new NewsNotFoundException(date));
+    }
+}
+````
+
+- Clase utilitaria y estática (constructor privado) para centralizar la creación de errores en formato reactivo
+  `(Mono.error)`.
+- `newsNotFound(String date)` retorna un `Mono.error` que emite la excepción `NewsNotFoundException`.
+
+### ✅ Beneficios de este enfoque
+
+- Separa las excepciones de negocio (`NewsNotFound`) de los errores técnicos.
+- Estandariza la forma en que se generan errores reactivos (`ApplicationExceptions`).
+- Facilita el futuro manejo global con un `@RestControllerAdvice`, devolviendo un `ErrorResponse` consistente al
+  cliente.
+
