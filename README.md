@@ -718,3 +718,71 @@ public class GlobalExceptionHandler {
   parámetros simples del método (por ejemplo, `@RequestParam`) y no se usa `@Validated`.
 - 💡 Se recomienda incluir los mensajes de validación por parámetro en el cuerpo de la respuesta para facilitar el
   diagnóstico desde el cliente.
+
+## Creando proyecto: [worker-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=worker-service&name=worker-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.worker.app&dependencies=webflux,lombok,kafka)
+
+Creamos el proyecto `worker-service` desde spring initializr con las siguientes dependencias.
+
+````xml
+<!--Spring Boot 3.5.5-->
+<!--Java 21-->
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-webflux</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka</artifactId>
+    </dependency>
+
+    <!--Agregado manualmente: Cliente Redisson (para conexión a Redis)-->
+    <dependency>
+        <groupId>org.redisson</groupId>
+        <artifactId>redisson-spring-boot-starter</artifactId>
+        <version>3.51.0</version>
+    </dependency>
+    <!--/Agregado manualmente-->
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>io.projectreactor</groupId>
+        <artifactId>reactor-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.kafka</groupId>
+        <artifactId>spring-kafka-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+````
+
+Nota
+
+En este microservicio `no usaremos` `Spring Data Redis Reactive` (como hicimos en `news-service`), sino que
+integraremos `Redis` mediante `redisson-spring-boot-starter`.
+
+La elección de `Redisson` se debe a que:
+
+- Proporciona un cliente `Redis` altamente optimizado y no bloqueante.
+- Ofrece una API más rica que la de `Spring Data Redis` (ejemplo: `RMap`, `RBucket`, `RList`, `locks distribuidos`,
+  `semáforos`, etc.).
+- Facilita definir el tipo de dato que se `serializa/deserializa` en `Redis` mediante codecs como
+  `TypedJsonJacksonCodec`.
+- Permite explorar un enfoque alternativo de integración con `Redis`, lo que complementa la experiencia del curso.
+- Además, forma parte de mi experiencia previa: realicé un curso de `Redis` donde se utilizó `Redisson` y me interesa
+  poner en práctica lo aprendido. Para referencia, aquí está el enlace al curso:
+  [reactive-redis-masterclass](https://github.com/magadiflo/reactive-redis-masterclass).
+
+Esto nos permitirá comparar ambos enfoques (`Spring Data Redis` vs. `Redisson`) y entender mejor sus fortalezas en
+distintos escenarios.
+
