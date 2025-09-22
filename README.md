@@ -212,6 +212,131 @@ public class KafkaTopicConfig {
 > recomendable especificar explícitamente el `número de particiones` y `réplicas` para garantizar escalabilidad y
 > tolerancia a fallos.
 
+## Ejemplo de respuesta JSON del servicio externo (Mediastack)
+
+El servicio externo `Mediastack`, que consumiremos en el `worker-service`, nos retorna la siguiente estructura
+JSON cuando realizamos la consulta a su API, pasándole dinámicamente el parámetro `date`:
+
+````bash
+$ https://api.mediastack.com/v1/news?access_key=922887e602f7b3a4cdebdd6b3fd7a2c6&limit=5&countries=pe&date=2025-09-22
+````
+
+````json
+{
+  "pagination": {
+    "limit": 5,
+    "offset": 0,
+    "count": 5,
+    "total": 128
+  },
+  "data": [
+    {
+      "author": "Paolo Valdivia",
+      "title": "“The Mandalorian and Grogu”: Primer tráiler oficial",
+      "description": "Disney y Lucasfilm lanzaron el primer tráiler de “The Mandalorian and Grogu”, la película que traerá de regreso a Pedro Pascal como Din Djarin junto a Grogu. El filme, dirigido por Jon Favreau, se estrena el 22 de mayo de 2026 y ya reveló reparto, trama y sorpresas para los fans de Star Wars.",
+      "url": "https://elcomercio.pe/saltar-intro/noticias/the-mandalorian-and-grogu-primer-trailer-oficial-star-wars-noticia/",
+      "source": "elcomercio",
+      "image": "https://elcomercio.pe/resizer/v2/JZHCGGFOWVC3FFD7NWQCTFP4KA.webp?width=3840&height=2160&auth=717b4ff9458d46d4cfdada7e0117f2b272718725c83b1be44e44c185e1e6994b&smart=true",
+      "category": "general",
+      "language": "es",
+      "country": "pe",
+      "published_at": "2025-09-22T16:31:56+00:00"
+    },
+    {
+      "author": "Diego Aquino (Lab Universitario EC)",
+      "title": "Obesidad infantil ya supera al bajo peso en el mundo y amenaza a más de un millón de niños en el Perú",
+      "description": "UNICEF advierte que más de un millón de niños peruanos vivirán con obesidad en 2030. Hoy, 4 de cada 10 escolares ya presentan exceso de peso.",
+      "url": "https://elcomercio.pe/lima/sucesos/obesidad-infantil-en-peru-4-de-cada-10-escolares-en-riesgo-noticia/",
+      "source": "elcomercio",
+      "image": "https://elcomercio.pe/resizer/v2/6KV22BVQPZHSHOIMVLVQC7CRA4.jpg?width=600&height=315&auth=927e0c04ae20bc41a5dacbfc0c403574b027bf498b98e7d5dbdda0f3bedee214&smart=true",
+      "category": "general",
+      "language": "es",
+      "country": "pe",
+      "published_at": "2025-09-22T16:22:00+00:00"
+    },
+    {
+      "author": "Pierina Denegri Davies",
+      "title": "¿Viajas a Santiago de Chile? Provecho recorrió la ciudad y armó una guía para saborear lo mejor de su cocina",
+      "description": "Erizos, centolla, completos, chorrillanas y más: una guía de restaurantes y espacios para comer bien y variado en la capital chilena.",
+      "url": "https://elcomercio.pe/provecho/tendencias/donde-comer-en-santiago-de-chile-restaurantes-brunchs-y-sabores-locales-que-valen-la-pena-noticia/",
+      "source": "elcomercio",
+      "image": "https://elcomercio.pe/resizer/v2/QDKXN6JJHRFGFC5NUVG45UXNAM.png?width=1200&height=810&auth=9b75dc5875e9bd88aecee6a913b73c7d87527397b914b2c206eb89ef9ddf4f62&smart=true",
+      "category": "general",
+      "language": "es",
+      "country": "pe",
+      "published_at": "2025-09-22T16:17:03+00:00"
+    },
+    {
+      "author": "Pierina Denegri Davies",
+      "title": "De la TV a una casona en Bellavista: así es Lote 10, el huarique donde el chef Israel Laura logró su reencuentro con la cocina",
+      "description": "En una casa familiar convertida en restaurante, el chef Israel Laura busca ofrecer una variada oferta de preparaciones suculentas. Conchas al miso, patito parrillero y una cata de piscos son parte de la experiencia que te invitamos a conocer en esta nota.",
+      "url": "https://elcomercio.pe/provecho/restaurantes/lote-10-el-huarique-donde-el-chef-israel-laura-explora-su-amor-por-la-gastronomia-y-el-pisco-callao-noticia/",
+      "source": "elcomercio",
+      "image": "https://elcomercio.pe/resizer/v2/XDJ4HQT6RBGNTPFOJU7HWIMV5Y.png?width=1200&height=810&auth=fe400f43e2a8f9b879497bdd84600b9015759e7ab8f097cd57cf76f4af029069&smart=true",
+      "category": "general",
+      "language": "es",
+      "country": "pe",
+      "published_at": "2025-09-22T16:16:45+00:00"
+    },
+    {
+      "author": "Redacción Diario Correo",
+      "title": "Cusco: suspenden trenes entre Cusco y Ollantaytambo por paro en Anta",
+      "description": "Cusco: suspenden trenes entre Cusco y Ollantaytambo por paro en Anta",
+      "url": "https://diariocorreo.pe/edicion/cusco/cusco-suspenden-trenes-entre-cusco-y-ollantaytambo-por-paro-en-anta-noticia/",
+      "source": "diariocorreo",
+      "image": "https://diariocorreo.pe/resizer/v2/UBZBU772ANCF7E3OSGCHOJCS6I.jpg?width=1200&height=804&auth=1eae6fafa0405fbbab774b2fe29a2684cb296faac59ffb4d1e6676cdeebf94c6&smart=true",
+      "category": "general",
+      "language": "es",
+      "country": "pe",
+      "published_at": "2025-09-22T16:12:56+00:00"
+    }
+  ]
+}
+````
+
+`Nota`: este JSON será almacenado en `Redis` (por el `worker-service`) y posteriormente consumido desde el
+`news-service`.
+
+## Definición de DTOs para mapear la respuesta
+
+A partir de la estructura anterior definimos los siguientes DTOs, que representan de manera tipada la información:
+
+````java
+public record Pagination(int limit,
+                         int offset,
+                         int count,
+                         int total) {
+}
+````
+
+````java
+public record NewsItem(String author,
+                       String title,
+                       String description,
+                       String url,
+                       String source,
+                       String image,
+                       String category,
+                       String language,
+                       String country,
+                       @JsonProperty("published_at")
+                       String publishedAt) {
+}
+````
+
+````java
+public record NewsResponse(Pagination pagination,
+                           @JsonProperty("data")
+                           List<NewsItem> items) {
+}
+````
+
+De esta forma queda claro:
+
+- El ejemplo real del JSON externo.
+- El propósito (`Redis` + `consumo en otro servicio`).
+- La representación tipada en DTOs.
+
 ## Configuración de Redis en news-service
 
 En el `News Service`, se utiliza `Spring Data Redis Reactive` junto con el cliente `Lettuce` para interactuar con
