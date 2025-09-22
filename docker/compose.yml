@@ -1,0 +1,8 @@
+services:
+  s-redis:
+    image: redis:8.0.3-alpine
+    container_name: c-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    command: [ "--user userdev >pass123 on allcommands allkeys", "--user default off" ]

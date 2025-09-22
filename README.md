@@ -865,6 +865,47 @@ public class GlobalExceptionHandler {
 - 💡 Se recomienda incluir los mensajes de validación por parámetro en el cuerpo de la respuesta para facilitar el
   diagnóstico desde el cliente.
 
+## 🧾 Configura a contenedor de Redis en docker compose
+
+Creamos un archivo `compose.yml` donde definimos el siguiente servicio de redis.
+
+````yml
+services:
+  s-redis:
+    image: redis:8.0.3-alpine
+    container_name: c-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    command: [ "--user userdev >pass123 on allcommands allkeys", "--user default off" ]
+````
+
+Esta configuración levanta un contenedor `Redis` con:
+
+- Un usuario ACL llamado `userdev` con contraseña `pass123`.
+- Permisos completos: acceso a todos los comandos (`allcommands`) y todas las claves (`allkeys`).
+- El usuario `default` está deshabilitado (`default off`) para evitar accesos sin autenticación.
+
+🔐 Seguridad
+
+- Redis exige autenticación desde el arranque.
+- Cualquier intento de ejecutar comandos sin `AUTH` resultará en `(error) NOAUTH Authentication required.`.
+- Ejemplo de autenticación desde `redis-cli`:
+    ````bash
+    127.0.0.1:6379> auth userdev pass123
+    OK 
+    ````
+
+### Diferencia entre `--user` y `ACL SETUSER`
+
+| Contexto                   | Forma                                                 | ¿Cuándo se usa?                                                                                                                                    |
+|----------------------------|-------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Arranque del contenedor    | `--user userdev >pass123 on allcommands allkeys`      | Se usa en el `command` de `Docker Compose` para definir usuarios `ACL` al iniciar `Redis`. Redis interpreta esta línea como configuración inicial. |
+| Interacción en tiempo real | `ACL SETUSER userdev >pass123 on allcommands allkeys` | Se usa dentro de `redis-cli` para crear o modificar usuarios `ACL` dinámicamente mientras `Redis` está corriendo.                                  |
+
+Ambas formas son equivalentes en funcionalidad, pero se aplican en contextos distintos: una al iniciar Redis, otra
+durante su ejecución.
+
 ## Creando proyecto: [worker-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=worker-service&name=worker-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.worker.app&dependencies=webflux,lombok,kafka)
 
 Creamos el proyecto `worker-service` desde spring initializr con las siguientes dependencias.
