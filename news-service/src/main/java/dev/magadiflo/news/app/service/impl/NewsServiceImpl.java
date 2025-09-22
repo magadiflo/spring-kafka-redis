@@ -2,6 +2,7 @@ package dev.magadiflo.news.app.service.impl;
 
 import dev.magadiflo.news.app.dao.NewsDao;
 import dev.magadiflo.news.app.exceptions.ApplicationExceptions;
+import dev.magadiflo.news.app.model.dto.response.NewsResponse;
 import dev.magadiflo.news.app.service.NewsService;
 import dev.magadiflo.news.app.util.Constants;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,7 @@ public class NewsServiceImpl implements NewsService {
     private final NewsDao newsDao;
 
     @Override
-    public Mono<Object> getNews(String date) {
+    public Mono<NewsResponse> getNews(String date) {
         return this.newsDao.getNews(date)
                 .doOnNext(value -> log.info("Cache HIT - Obteniendo desde Redis para fecha: {}", value))
                 .switchIfEmpty(Mono.defer(() -> {

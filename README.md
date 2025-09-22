@@ -492,7 +492,7 @@ El servicio se encarga de:
 
 ````java
 public interface NewsService {
-    Mono<Object> getNews(String date);
+    Mono<NewsResponse> getNews(String date);
 
     Mono<Void> publishToMessageBroker(String date);
 }
@@ -500,9 +500,6 @@ public interface NewsService {
 
 - `getNews(String date)`: consulta si existe la noticia en `Redis`, y si no, dispara el flujo de publicación a `Kafka`.
 - `publishToMessageBroker(String date)`: envía un mensaje al `topic` de `Kafka` con la fecha solicitada.
-
-> ⚠️ `Nota`: por ahora el retorno es `Mono<Object>`, pero cuando tengamos el DTO definido conviene tipar la respuesta
-> `(Mono<NewsDto>)` para trabajar de manera más segura.
 
 ### Implementación
 
@@ -517,7 +514,7 @@ public class NewsServiceImpl implements NewsService {
     private final NewsDao newsDao;
 
     @Override
-    public Mono<Object> getNews(String date) {
+    public Mono<NewsResponse> getNews(String date) {
         return this.newsDao.getNews(date)
                 .doOnNext(value -> log.info("Cache HIT - Obteniendo desde Redis para fecha: {}", value))
                 .switchIfEmpty(Mono.defer(() -> {
@@ -733,7 +730,7 @@ public class NewsServiceImpl implements NewsService {
     private final NewsDao newsDao;
 
     @Override
-    public Mono<Object> getNews(String date) {
+    public Mono<NewsResponse> getNews(String date) {
         return this.newsDao.getNews(date)
                 .doOnNext(value -> log.info("Cache HIT - Obteniendo desde Redis para fecha: {}", value))
                 .switchIfEmpty(Mono.defer(() -> {
