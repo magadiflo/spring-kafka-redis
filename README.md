@@ -434,18 +434,18 @@ consulta si existe una noticia asociada a una fecha específica.
 
 ````java
 public interface NewsDao {
-    Mono<Object> getNews(String date);
+    Mono<NewsResponse> getNews(String date);
 }
 ````
 
-- `Mono<Object>` → dado que estamos en un contexto reactivo, el método devuelve un `Mono`, que representa un valor
-  asíncrono (puede contener la noticia o estar vacío si no existe en `Redis`).
-- `String date` → se usa la fecha como clave en `Redis`. En un caso real, podría considerarse un identificador más
-  rico (ej. `news:2025-09-16`) para evitar colisiones.
+- `Mono<NewsResponse>` → dado que estamos en un contexto reactivo, el método devuelve un `Mono`, que representa un
+  valor asíncrono (puede contener la noticia o estar vacío si no existe en `Redis`).
+- `String date` → se usa la fecha como parte de la clave en `Redis`.
 
 ### Implementación NewsDaoImpl
 
-La implementación utiliza el `ReactiveRedisOperations` configurado previamente para interactuar con `Redis`.
+La implementación utiliza el `ReactiveRedisOperations<String, NewsResponse>` configurado previamente para interactuar
+con `Redis` de manera tipada.
 
 ````java
 
@@ -453,19 +453,31 @@ La implementación utiliza el `ReactiveRedisOperations` configurado previamente 
 @Repository
 public class NewsDaoImpl implements NewsDao {
 
-    private final ReactiveRedisOperations<String, Object> reactiveRedisOperations;
+    private final ReactiveRedisOperations<String, NewsResponse> reactiveRedisOperations;
+    private static final String KEY_NEWS_REDIS = "news:%s";
 
     @Override
-    public Mono<Object> getNews(String date) {
-        return this.reactiveRedisOperations.opsForValue().get(date);
+    public Mono<NewsResponse> getNews(String date) {
+        return this.reactiveRedisOperations.opsForValue().get(KEY_NEWS_REDIS.formatted(date));
     }
+
 }
 ````
 
 - `@Repository` → marca la clase como componente de acceso a datos.
 - `@RequiredArgsConstructor (Lombok)` → genera automáticamente un constructor con los argumentos final, en este caso
   `reactiveRedisOperations`.
-- `opsForValue().get(date)` → obtiene el valor almacenado en `Redis` para la clave proporcionada (la fecha).
+- `ReactiveRedisOperations<String, NewsResponse>` → está tipado con `NewsResponse`, lo que permite trabajar directamente
+  con el DTO sin necesidad de casting ni pérdida de información en la serialización.
+- `KEY_NEWS_REDIS` → define un namespace en Redis (`news:<fecha>`), lo que organiza mejor las claves y previene posibles
+  colisiones con otros datos.
+- `opsForValue().get(KEY_NEWS_REDIS.formatted(date))` → recupera el valor de Redis según la clave construida. Por
+  ejemplo: `news:2025-09-16`.
+
+En pocas palabras:
+
+- Clave en Redis → `news:<fecha>`
+- Valor en Redis → instancia de `NewsResponse` serializada en `JSON`
 
 ## Servicio de Noticias (`NewsService`)
 
