@@ -658,3 +658,63 @@ public class NewsController {
     - Si existe la noticia en Redis → se devuelve con `status = true` y data poblado.
     - Si no existe → se lanza `NewsNotFoundException`, que más adelante manejaremos en un handler global de excepciones
       para devolver un `ErrorResponse`.
+
+## 🛡️ Manejador global de excepciones
+
+Un `@RestControllerAdvice` nos permite centralizar el manejo de excepciones y devolver respuestas uniformes a los
+clientes, siguiendo siempre la misma estructura (`ErrorResponse`).
+
+En este proyecto, tenemos dos escenarios principales:
+
+1. `Errores de validación`: cuando los parámetros enviados al controlador no cumplen las reglas de `Bean Validation`.
+2. `Errores inesperados`: cualquier excepción no controlada dentro de la aplicación.
+
+````java
+
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleException(HandlerMethodValidationException e) {
+        e.getValueResults().forEach(result -> {
+            String parameterName = result.getMethodParameter().getParameterName();
+            List<String> messageList = result.getResolvableErrors().stream()
+                    .map(MessageSourceResolvable::getDefaultMessage)
+                    .toList();
+            log.warn("{}: {}", parameterName, messageList);
+        });
+
+        return Mono.fromSupplier(() -> ResponseEntity
+                .badRequest()
+                .body(new ErrorResponse(
+                        ErrorCatalog.INVALID_PARAMETERS.getCode(),
+                        ErrorCatalog.INVALID_PARAMETERS.getMessage(),
+                        ErrorType.FUNCTIONAL,
+                        Collections.singletonList(e.getMessage()),
+                        LocalDateTime.now())
+                )
+        );
+    }
+
+    @ExceptionHandler(Exception.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleException(Exception e) {
+        log.error("Excepción General: {}", e.getMessage(), e);
+        return Mono.fromSupplier(() -> ResponseEntity
+                .internalServerError()
+                .body(new ErrorResponse(
+                        ErrorCatalog.INTERVAL_SERVER_ERROR.getCode(),
+                        ErrorCatalog.INTERVAL_SERVER_ERROR.getMessage(),
+                        ErrorType.SYSTEM,
+                        Collections.singletonList(e.getMessage()),
+                        LocalDateTime.now())
+                ));
+    }
+
+}
+````
+
+- `HandlerMethodValidationException`. Este tipo de excepción se lanza cuando la validación ocurre directamente sobre
+  parámetros simples del método (por ejemplo, `@RequestParam`) y no se usa `@Validated`.
+- 💡 Se recomienda incluir los mensajes de validación por parámetro en el cuerpo de la respuesta para facilitar el
+  diagnóstico desde el cliente.
