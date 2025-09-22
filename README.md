@@ -337,12 +337,14 @@ De esta forma queda claro:
 - El propósito (`Redis` + `consumo en otro servicio`).
 - La representación tipada en DTOs.
 
-## Configuración de Redis en news-service
+## Configuración de Redis en `news-service`
 
-En el `News Service`, se utiliza `Spring Data Redis Reactive` junto con el cliente `Lettuce` para interactuar con
-`Redis` de manera reactiva.
+En el `News Service` usamos `Spring Data Redis (reactive)` con `Lettuce` para interactuar con `Redis` de forma
+no bloqueante — ideal cuando trabajamos con `Spring WebFlux`.
 
-Esto permite realizar operaciones no bloqueantes, algo muy útil en aplicaciones basadas en `Spring WebFlux`.
+En esta configuración tipamos el `ReactiveRedisOperations` con el DTO `NewsResponse`
+(la estructura que recibimos de la API externa), de modo que `Redis` almacene y devuelva objetos fuertemente tipados
+(`JSON`).
 
 ````java
 
@@ -360,25 +362,29 @@ public class RedisConfig {
     // Configuración de conexión
     @Bean
     public ReactiveRedisConnectionFactory reactiveRedisConnectionFactory() {
-        var redisStandaloneConfiguration = new RedisStandaloneConfiguration();
-        redisStandaloneConfiguration.setHostName(Objects.requireNonNull(this.redisHost));
-        redisStandaloneConfiguration.setPort(Objects.requireNonNull(this.redisPort));
-        redisStandaloneConfiguration.setPassword(Objects.requireNonNull(this.redisPassword));
-        return new LettuceConnectionFactory(redisStandaloneConfiguration);
+        var config = new RedisStandaloneConfiguration();
+        config.setHostName(Objects.requireNonNull(this.redisHost));
+        config.setPort(Objects.requireNonNull(this.redisPort));
+        config.setPassword(Objects.requireNonNull(this.redisPassword));
+        return new LettuceConnectionFactory(config);
     }
 
     // Configuración del template reactivo con serializadores
     @Bean
-    public ReactiveRedisOperations<String, Object> reactiveRedisOperations(ReactiveRedisConnectionFactory reactiveRedisConnectionFactory) {
-        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(Object.class); // Para serializar el value
-        RedisSerializationContext.RedisSerializationContextBuilder<String, Object> builder =
-                RedisSerializationContext.newSerializationContext(new StringRedisSerializer()); // Para serializar la key
-        RedisSerializationContext<String, Object> context = builder
-                .value(serializer)
-                .hashKey(serializer)
-                .hashValue(serializer)
+    public ReactiveRedisOperations<String, NewsResponse> reactiveRedisOperations(ReactiveRedisConnectionFactory factory) {
+        // Serializer para valores (NewsResponse -> JSON)
+        var valueSerializer = new Jackson2JsonRedisSerializer<>(NewsResponse.class);
+
+        // Serializer para las keys (strings legibles en Redis)
+        var keySerializer = new StringRedisSerializer();
+
+        var context = RedisSerializationContext.<String, NewsResponse>newSerializationContext(keySerializer)
+                .value(valueSerializer)
+                .hashKey(keySerializer)
+                .hashValue(valueSerializer)
                 .build();
-        return new ReactiveRedisTemplate<>(reactiveRedisConnectionFactory, context);
+
+        return new ReactiveRedisTemplate<>(factory, context);
     }
 }
 ````
@@ -398,12 +404,17 @@ Explicación paso a paso
     - Este `ConnectionFactory` será la encargada de abrir conexiones reactivas hacia Redis.
 
 3. `ReactiveRedisOperations`
-    - Se construye un `ReactiveRedisTemplate`, que es el componente principal para interactuar con Redis de forma
-      reactiva.
-    - Para serializar las `keys`, se usa `StringRedisSerializer`.
-    - Para serializar los `values` y objetos más complejos, se usa `Jackson2JsonRedisSerializer<Object>`.
-    - También se configuran las serializaciones de `hashKey` y `hashValue` para soportar estructuras de tipo `Hash`
-      en `Redis`.
+    - Usamos en `ReactiveRedisOperations<String, NewsResponse>` el `NewsResponse` en lugar de `Object`.
+    - Ventajas: tipado fuerte, sin cast en las capas superiores, mejor legibilidad y seguridad en tiempo de compilación.
+    - `Jackson2JsonRedisSerializer<NewsResponse>` → serializa los `valores` como `JSON` (y deserializa al leer).
+    - `StringRedisSerializer` para las `keys` → las claves en `Redis` serán legibles (`news:2025-09-22` por ejemplo) en
+      lugar de serializaciones binarias/JSON.
+
+4. `Compatibilidad con worker-service (Redisson)`
+    - Para que el `worker-service` (que usa `Redisson`) y el `news-service` (que usa `Spring Data Redis`) sean
+      interoperables sobre la misma clave/valor en `Redis`, ambos deben usar JSON y el mismo formato de serialización.
+    - En `Redisson` configura `TypedJsonJacksonCodec(NewsResponse.class)` o `JsonJacksonCodec` para que `Redisson`
+      escriba JSON compatible con `Jackson` en `Spring Data Redis`.
 
 En pocas palabras:
 

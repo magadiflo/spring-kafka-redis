@@ -1,5 +1,6 @@
 package dev.magadiflo.news.app.config;
 
+import dev.magadiflo.news.app.model.dto.response.NewsResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,24 +28,25 @@ public class RedisConfig {
 
     @Bean
     public ReactiveRedisConnectionFactory reactiveRedisConnectionFactory() {
-        var redisStandaloneConfiguration = new RedisStandaloneConfiguration();
-        redisStandaloneConfiguration.setHostName(Objects.requireNonNull(this.redisHost));
-        redisStandaloneConfiguration.setPort(Objects.requireNonNull(this.redisPort));
-        redisStandaloneConfiguration.setPassword(Objects.requireNonNull(this.redisPassword));
-        return new LettuceConnectionFactory(redisStandaloneConfiguration);
+        var config = new RedisStandaloneConfiguration();
+        config.setHostName(Objects.requireNonNull(this.redisHost));
+        config.setPort(Objects.requireNonNull(this.redisPort));
+        config.setPassword(Objects.requireNonNull(this.redisPassword));
+        return new LettuceConnectionFactory(config);
     }
 
     @Bean
-    public ReactiveRedisOperations<String, Object> reactiveRedisOperations(ReactiveRedisConnectionFactory reactiveRedisConnectionFactory) {
-        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(Object.class); // Para serializar el value
-        RedisSerializationContext.RedisSerializationContextBuilder<String, Object> builder =
-                RedisSerializationContext.newSerializationContext(new StringRedisSerializer()); // Para serializar la key
-        RedisSerializationContext<String, Object> context = builder
-                .value(serializer)
-                .hashKey(serializer)
-                .hashValue(serializer)
+    public ReactiveRedisOperations<String, NewsResponse> reactiveRedisOperations(ReactiveRedisConnectionFactory factory) {
+        var valueSerializer = new Jackson2JsonRedisSerializer<>(NewsResponse.class);
+        var keySerializer = new StringRedisSerializer();
+
+        var context = RedisSerializationContext.<String, NewsResponse>newSerializationContext(keySerializer)
+                .value(valueSerializer)
+                .hashKey(keySerializer)
+                .hashValue(valueSerializer)
                 .build();
-        return new ReactiveRedisTemplate<>(reactiveRedisConnectionFactory, context);
+
+        return new ReactiveRedisTemplate<>(factory, context);
     }
 
 }
