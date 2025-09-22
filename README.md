@@ -778,12 +778,13 @@ public class NewsController {
     private final NewsService newsService;
 
     @GetMapping
-    public Mono<ResponseEntity<DataResponse<Object>>> getNews(@NotBlank(message = Constants.DATE_NOT_BLANK_MESSAGE)
-                                                              @Pattern(regexp = Constants.DATE_FORMAT, message = Constants.DATE_PATTERN_MESSAGE)
-                                                              @RequestParam(required = false) String date) {
+    public Mono<ResponseEntity<DataResponse<NewsResponse>>> getNews(@NotBlank(message = Constants.DATE_NOT_BLANK_MESSAGE)
+                                                                    @Pattern(regexp = Constants.DATE_FORMAT, message = Constants.DATE_PATTERN_MESSAGE)
+                                                                    @RequestParam(required = false) String date) {
         return this.newsService.getNews(date)
-                .map(data -> ResponseEntity.ok(new DataResponse<>(Constants.DATA_FOUND_MESSAGE, Boolean.TRUE, data)));
+                .map(newsData -> ResponseEntity.ok(new DataResponse<>(Constants.DATA_FOUND_MESSAGE, Boolean.TRUE, newsData)));
     }
+
 }
 ````
 
