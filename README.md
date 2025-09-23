@@ -1066,10 +1066,95 @@ Comprobamos que los contenedores están ejecutándose correctamente.
 
 ````bash
 $ docker container ls -a
-CONTAINER ID   IMAGE                COMMAND                  CREATED          STATUS          PORTS                                         NAMES
-8cf808ce79fd   redis:8.0.3-alpine   "docker-entrypoint.s…"   50 seconds ago   Up 49 seconds   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp   c-redis
-bc17aeb80786   apache/kafka:4.1.0   "/__cacert_entrypoin…"   50 seconds ago   Up 49 seconds   0.0.0.0:9092->9092/tcp, [::]:9092->9092/tcp   c-kafka 
+CONTAINER ID   IMAGE                COMMAND                  CREATED         STATUS         PORTS                                         NAMES
+f2e32f2f7d80   redis:8.0.3-alpine   "docker-entrypoint.s…"   8 seconds ago   Up 7 seconds   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp   c-redis
+51ca449a7828   apache/kafka:4.1.0   "/__cacert_entrypoin…"   9 seconds ago   Up 7 seconds   0.0.0.0:9092->9092/tcp, [::]:9092->9092/tcp   c-kafka
 ````
+
+## 🚀 Ejecución y pruebas iniciales del `news-service`
+
+Al levantar la aplicación por primera vez, esta se conectará a `Redis` y a `Apache Kafka` utilizando los valores por
+defecto definidos en el `application.yml`.
+
+El log de arranque confirma que la aplicación se inicializó correctamente y que los clientes de `Redis` y `Kafka`
+fueron configurados sin errores:
+
+````bash
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.5.5)
+
+2025-09-23T16:25:24.661-05:00  INFO 18616 --- [news-service] [           main] d.m.news.app.NewsServiceApplication      : Starting NewsServiceApplication using Java 21.0.6 with PID 18616 (D:\programming\spring\02.youtube\09.dev_dominio\spring-kafka-redis\news-service\target\classes started by magadiflo in D:\programming\spring\02.youtube\09.dev_dominio\spring-kafka-redis)
+2025-09-23T16:25:24.666-05:00  INFO 18616 --- [news-service] [           main] d.m.news.app.NewsServiceApplication      : No active profile set, falling back to 1 default profile: "default"
+2025-09-23T16:25:25.496-05:00  INFO 18616 --- [news-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2025-09-23T16:25:25.499-05:00  INFO 18616 --- [news-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2025-09-23T16:25:25.552-05:00  INFO 18616 --- [news-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 24 ms. Found 0 Redis repository interfaces.
+2025-09-23T16:25:27.348-05:00  INFO 18616 --- [news-service] [           main] o.a.k.clients.admin.AdminClientConfig    : AdminClientConfig values: 
+	auto.include.jmx.reporter = true
+	bootstrap.controllers = []
+	bootstrap.servers = [localhost:9092]
+	...
+	ssl.truststore.type = JKS
+
+2025-09-23T16:25:27.555-05:00  INFO 18616 --- [news-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka version: 3.9.1
+2025-09-23T16:25:27.557-05:00  INFO 18616 --- [news-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka commitId: f745dfdcee2b9851
+2025-09-23T16:25:27.557-05:00  INFO 18616 --- [news-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka startTimeMs: 1758662727552
+2025-09-23T16:25:28.134-05:00  INFO 18616 --- [news-service] [service-admin-0] o.a.kafka.common.utils.AppInfoParser     : App info kafka.admin.client for news-service-admin-0 unregistered
+2025-09-23T16:25:28.146-05:00  INFO 18616 --- [news-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Metrics scheduler closed
+2025-09-23T16:25:28.146-05:00  INFO 18616 --- [news-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Closing reporter org.apache.kafka.common.metrics.JmxReporter
+2025-09-23T16:25:28.146-05:00  INFO 18616 --- [news-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Metrics reporters closed
+2025-09-23T16:25:28.259-05:00  INFO 18616 --- [news-service] [           main] o.s.b.web.embedded.netty.NettyWebServer  : Netty started on port 8080 (http)
+2025-09-23T16:25:28.273-05:00  INFO 18616 --- [news-service] [           main] d.m.news.app.NewsServiceApplication      : Started NewsServiceApplication in 4.407 seconds (process running for 5.127) 
+````
+
+### 🔎 Prueba del endpoint REST
+
+Realizamos una petición al endpoint del `news-service` para obtener la noticia correspondiente a una fecha específica:
+
+````bash
+$ curl -v http://localhost:8080/api/v1/news?date=2025-09-23 | jq
+>
+< HTTP/1.1 404 Not Found
+< Content-Type: application/json
+< Content-Length: 259
+<
+{
+  "code": "NEWS_MS_201",
+  "message": "Noticia no encontrada",
+  "errorType": "FUNCTIONAL",
+  "details": [
+    "La noticia solicitada para la fecha [2025-09-23] aún no está disponible. Por favor, intente nuevamente en unos momentos"
+  ],
+  "timestamp": "2025-09-23T16:27:21.8896657"
+}
+````
+
+La respuesta confirma que la noticia aún no existe en `Redis`, y la aplicación devuelve el mensaje funcional
+correspondiente.
+
+### 📩 Validación en Kafka
+
+Aunque la noticia no estaba disponible, el servicio publicó la fecha solicitada en el topic `news-topic`. Esto puede
+verificarse con el consumidor de consola:
+
+````bash
+$ docker container exec -it c-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic news-topic --from-beginning
+2025-09-23 
+````
+
+Esto confirma que la aplicación procesa correctamente el flujo esperado:
+
+1. `Consulta en Redis` (no encuentra la noticia).
+2. `Publica la fecha en Kafka` para que otro servicio (`worker-service`) la procese.
+
+📌 Conclusión:
+> El `news-service` quedó validado en su primera fase: `Redis` funciona como caché de noticias y `Kafka` como canal de
+> comunicación para delegar el trabajo a otro servicio.
 
 ## Creando proyecto: [worker-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=worker-service&name=worker-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.worker.app&dependencies=webflux,lombok,kafka)
 
