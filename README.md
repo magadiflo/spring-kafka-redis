@@ -116,19 +116,21 @@ spring:
   application:
     name: news-service
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   data:
     redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
-      password: ${REDIS_PASSWORD}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:userdev}
+      password: ${REDIS_PASSWORD:pass123}
 ````
 
 Explicación:
 
-- `spring.kafka.bootstrap-servers`: indica la dirección de los `brokers de Kafka`.
-- `spring.data.redis`: define las credenciales de acceso a `Redis`.
-- El uso de variables de entorno (`${...}`) permite mayor portabilidad entre entornos (desarrollo, staging, producción).
+- `spring.kafka.bootstrap-servers`: indica la dirección de los `brokers de Kafka`. Si la variable de entorno
+  `KAFKA_BOOTSTRAP_SERVERS` no es definida, por defecto usará la dirección `localhost:9092`.
+- `spring.data.redis`: define las credenciales de acceso a `Redis`. También definimos valores por defecto si las
+  variables de entorno no son definidas.
 
 ## Configuración de Producer y Topic en Kafka
 
@@ -356,22 +358,26 @@ public class RedisConfig {
     @Value("${spring.data.redis.port}")
     private Integer redisPort;
 
+    @Value("${spring.data.redis.username}")
+    private String redisUsername;
+
     @Value("${spring.data.redis.password}")
     private String redisPassword;
 
     // Configuración de conexión
-    @Bean
+    @Bean("reactiveRedisConnectionFactory")
     public ReactiveRedisConnectionFactory reactiveRedisConnectionFactory() {
         var config = new RedisStandaloneConfiguration();
         config.setHostName(Objects.requireNonNull(this.redisHost));
         config.setPort(Objects.requireNonNull(this.redisPort));
+        config.setUsername(Objects.requireNonNull(this.redisUsername));
         config.setPassword(Objects.requireNonNull(this.redisPassword));
         return new LettuceConnectionFactory(config);
     }
 
     // Configuración del template reactivo con serializadores
     @Bean
-    public ReactiveRedisOperations<String, NewsResponse> reactiveRedisOperations(ReactiveRedisConnectionFactory factory) {
+    public ReactiveRedisOperations<String, NewsResponse> reactiveRedisOperations(@Qualifier("reactiveRedisConnectionFactory") ReactiveRedisConnectionFactory factory) {
         // Serializer para valores (NewsResponse -> JSON)
         var valueSerializer = new Jackson2JsonRedisSerializer<>(NewsResponse.class);
 
@@ -394,14 +400,26 @@ Explicación paso a paso
 1. `Propiedades externas`
     - `spring.data.redis.host` → Dirección del servidor Redis.
     - `spring.data.redis.port` → Puerto de Redis.
+    - `spring.data.redis.username` → Usuario ACL configurado en Redis.
     - `spring.data.redis.password` → Contraseña (si está configurada en Redis).
 
    Estas propiedades se inyectan desde el `application.yml`.
 
 2. `ReactiveRedisConnectionFactory`
-    - Se crea una instancia de `RedisStandaloneConfiguration` para indicar `host`, `puerto` y `password`.
+    - Se crea una instancia de `RedisStandaloneConfiguration` para indicar `host`, `puerto`, `username` y `password`.
     - Se usa `LettuceConnectionFactory`, que es el driver por defecto recomendado para `Redis` en entornos reactivos.
     - Este `ConnectionFactory` será la encargada de abrir conexiones reactivas hacia Redis.
+   > `Spring Boot` crea automáticamente un bean llamado `redisConnectionFactory` como parte de su autoconfiguración.
+   > Al definir nuestro propio bean `reactiveRedisConnectionFactory`, se generan dos candidatos del mismo tipo, lo que
+   > provoca ambigüedad al momento de inyectarlos. Para resolverlo, usamos:
+   >
+   > - `@Bean("reactiveRedisConnectionFactory")`: asigna un nombre explícito al bean personalizado.
+   > - `@Qualifier("reactiveRedisConnectionFactory")`: indica claramente cuál bean debe inyectarse en
+       `reactiveRedisOperations`.
+   >
+   > Esto evita conflictos y garantiza que se use la configuración reactiva definida por nosotros, en lugar de la
+   > conexión estándar que Spring crea por defecto.
+
 
 3. `ReactiveRedisOperations`
     - Usamos en `ReactiveRedisOperations<String, NewsResponse>` el `NewsResponse` en lugar de `Object`.
@@ -932,7 +950,7 @@ que proporciona un inicio significativamente más rápido y un menor consumo de 
 
 ### Definición de los listeners
 
-Para que esto sea más claro, veamos cómo debe configurarse `Kafka` para admitir dos tipos de conexión:
+Para que esto sea más claro, veamos cómo debe configurarse `Kafka` para admitir `dos tipos de conexión`:
 
 1. `Conexiones de host` (aquellas que llegan a través del puerto asignado al host): estas deben conectarse mediante
    `localhost`.
