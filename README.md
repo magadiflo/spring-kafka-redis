@@ -587,8 +587,14 @@ Esto permite desacoplar los errores técnicos del protocolo HTTP de los errores 
 @RequiredArgsConstructor
 public enum ErrorCatalog {
 
+    // Errores de validación
     INVALID_PARAMETERS("NEWS_MS_001", "Parámetro de solicitud de fecha no válido"),
-    INTERVAL_SERVER_ERROR("NEWS_MS_002", "Error Interno del Servidor");
+
+    // Errores de negocio
+    NEWS_NOT_FOUND("NEWS_MS_201", "Noticia no encontrada"),
+
+    // Errores internos del servidor
+    INTERNAL_SERVER_ERROR("NEWS_MS_002", "Error Interno del Servidor");
 
     private final String code;
     private final String message;
@@ -828,10 +834,11 @@ public class NewsController {
 Un `@RestControllerAdvice` nos permite centralizar el manejo de excepciones y devolver respuestas uniformes a los
 clientes, siguiendo siempre la misma estructura (`ErrorResponse`).
 
-En este proyecto, tenemos dos escenarios principales:
+En este proyecto, tenemos tres escenarios principales:
 
 1. `Errores de validación`: cuando los parámetros enviados al controlador no cumplen las reglas de `Bean Validation`.
-2. `Errores inesperados`: cualquier excepción no controlada dentro de la aplicación.
+2. `Errores de negocio`: cuando la información buscada no se encuentra.
+3. `Errores inesperados`: cualquier excepción no controlada dentro de la aplicación.
 
 ````java
 
@@ -840,7 +847,7 @@ En este proyecto, tenemos dos escenarios principales:
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(HandlerMethodValidationException.class)
-    public Mono<ResponseEntity<ErrorResponse>> handleException(HandlerMethodValidationException e) {
+    public Mono<ResponseEntity<ErrorResponse>> handleValidationException(HandlerMethodValidationException e) {
         e.getValueResults().forEach(result -> {
             String parameterName = result.getMethodParameter().getParameterName();
             List<String> messageList = result.getResolvableErrors().stream()
@@ -848,29 +855,42 @@ public class GlobalExceptionHandler {
                     .toList();
             log.warn("{}: {}", parameterName, messageList);
         });
+        return this.buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                ErrorCatalog.INVALID_PARAMETERS,
+                ErrorType.FUNCTIONAL,
+                e.getMessage());
+    }
 
-        return Mono.fromSupplier(() -> ResponseEntity
-                .badRequest()
-                .body(new ErrorResponse(
-                        ErrorCatalog.INVALID_PARAMETERS.getCode(),
-                        ErrorCatalog.INVALID_PARAMETERS.getMessage(),
-                        ErrorType.FUNCTIONAL,
-                        Collections.singletonList(e.getMessage()),
-                        LocalDateTime.now())
-                )
-        );
+    @ExceptionHandler(NewsNotFoundException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleNewsNotFoundException(NewsNotFoundException e) {
+        log.error("{}", e.getMessage(), e);
+        return this.buildErrorResponse(
+                HttpStatus.NOT_FOUND,
+                ErrorCatalog.NEWS_NOT_FOUND,
+                ErrorType.FUNCTIONAL,
+                e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)
-    public Mono<ResponseEntity<ErrorResponse>> handleException(Exception e) {
+    public Mono<ResponseEntity<ErrorResponse>> handleGenericException(Exception e) {
         log.error("Excepción General: {}", e.getMessage(), e);
-        return Mono.fromSupplier(() -> ResponseEntity
-                .internalServerError()
+        return this.buildErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                ErrorCatalog.INTERNAL_SERVER_ERROR,
+                ErrorType.SYSTEM,
+                e.getMessage());
+    }
+
+    private Mono<ResponseEntity<ErrorResponse>> buildErrorResponse(HttpStatus status, ErrorCatalog errorCatalog,
+                                                                   ErrorType errorType, String details) {
+        return Mono.just(ResponseEntity
+                .status(status)
                 .body(new ErrorResponse(
-                        ErrorCatalog.INTERVAL_SERVER_ERROR.getCode(),
-                        ErrorCatalog.INTERVAL_SERVER_ERROR.getMessage(),
-                        ErrorType.SYSTEM,
-                        Collections.singletonList(e.getMessage()),
+                        errorCatalog.getCode(),
+                        errorCatalog.getMessage(),
+                        errorType,
+                        Collections.singletonList(details),
                         LocalDateTime.now())
                 ));
     }
