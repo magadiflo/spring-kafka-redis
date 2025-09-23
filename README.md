@@ -1158,7 +1158,8 @@ Esto confirma que la aplicación procesa correctamente el flujo esperado:
 
 ## Creando proyecto: [worker-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=worker-service&name=worker-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.worker.app&dependencies=webflux,lombok,kafka)
 
-Creamos el proyecto `worker-service` desde spring initializr con las siguientes dependencias.
+El `worker-service` está construido con `Spring Boot 3.5.5` y `Java 21`. Su rol principal es
+`consumir fechas desde Kafka`, `consultar noticias al servicio externo` y `almacenarlas en Redis` utilizando `Redisson`.
 
 ````xml
 <!--Spring Boot 3.5.5-->
