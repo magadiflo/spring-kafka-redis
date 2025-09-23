@@ -1029,6 +1029,28 @@ services:
 - Desde el IDE (host): Usa `bootstrap.servers=localhost:9092`
 - Desde otro contenedor: Usa `bootstrap.servers=s-kafka:9093`
 
+## Levantando Redis y Kafka con Docker Compose
+
+Para levantar nuestros servicios con `Docker Compose` ejecutamos el siguiente comando.
+
+````bash
+D:\programming\spring\02.youtube\09.dev_dominio\spring-kafka-redis (main -> origin)
+$ docker compose -f ./docker/compose.yml up -d                                     
+[+] Running 3/3                                                                    
+ ✔ Network docker_default  Created                                                 
+ ✔ Container c-redis       Started                                                 
+ ✔ Container c-kafka       Started                                                 
+````
+
+Comprobamos que los contenedores están ejecutándose correctamente.
+
+````bash
+$ docker container ls -a
+CONTAINER ID   IMAGE                COMMAND                  CREATED          STATUS          PORTS                                         NAMES
+8cf808ce79fd   redis:8.0.3-alpine   "docker-entrypoint.s…"   50 seconds ago   Up 49 seconds   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp   c-redis
+bc17aeb80786   apache/kafka:4.1.0   "/__cacert_entrypoin…"   50 seconds ago   Up 49 seconds   0.0.0.0:9092->9092/tcp, [::]:9092->9092/tcp   c-kafka 
+````
+
 ## Creando proyecto: [worker-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=worker-service&name=worker-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.worker.app&dependencies=webflux,lombok,kafka)
 
 Creamos el proyecto `worker-service` desde spring initializr con las siguientes dependencias.
