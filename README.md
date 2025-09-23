@@ -906,6 +906,111 @@ Esta configuración levanta un contenedor `Redis` con:
 Ambas formas son equivalentes en funcionalidad, pero se aplican en contextos distintos: una al iniciar Redis, otra
 durante su ejecución.
 
+## 🧾 [Configura contenedor de Kafka en docker compose](https://docs.docker.com/guides/kafka/)
+
+> Este apartado fue tomado de la siguiente guía
+> [Developing event-driven applications with Kafka and Docker.](https://docs.docker.com/guides/kafka/)
+
+`Apache Kafka`, una plataforma distribuida de streaming de eventos, suele ser la base de las arquitecturas basadas en
+eventos. Desafortunadamente, configurar e implementar una instancia propia de `Kafka` para el desarrollo suele ser
+complicado. Afortunadamente, `Docker` y los contenedores lo simplifican mucho.
+
+En esta guía, aprenderá a:
+
+- Usar Docker para iniciar un clúster de Kafka
+- Conectar una aplicación no contenedorizada al clúster
+- Conectar una aplicación contenedorizada al clúster
+
+A partir de `Kafka 3.3`, la implementación de `Kafka` se simplificó enormemente al prescindir de `Zookeeper` gracias
+a `KRaft (Kafka Raft)`. Con `KRaft`, configurar una instancia de `Kafka` para el desarrollo local es mucho más
+sencillo. A partir del lanzamiento de `Kafka 3.8`, ya está disponible una nueva imagen de Docker nativa de Kafka,
+que proporciona un inicio significativamente más rápido y un menor consumo de memoria.
+
+> Esta guía utilizará la imagen de `Apache/Kafka`, ya que incluye numerosos scripts útiles para administrar y trabajar
+> con `Kafka`. Sin embargo, puede que prefiera usar la imagen nativa de `Apache/Kafka`, ya que se inicia más rápido y
+> requiere menos recursos.
+
+### Definición de los listeners
+
+Para que esto sea más claro, veamos cómo debe configurarse `Kafka` para admitir dos tipos de conexión:
+
+1. `Conexiones de host` (aquellas que llegan a través del puerto asignado al host): estas deben conectarse mediante
+   `localhost`.
+2. `Conexiones de Docker` (aquellas que provienen de las redes Docker): estas no pueden conectarse mediante `localhost`,
+   sino mediante el alias de red (o dirección DNS) del `servicio de Kafka`.
+
+Dado que los clientes necesitan dos métodos diferentes para conectarse, se requieren dos oyentes: `HOST` y `DOCKER`.
+El listener `HOST` indicará a los clientes que se conecten mediante `localhost:9092`, mientras que el listener `DOCKER`
+les indicará que se conecten mediante `s-kafka:9093`. Cabe destacar que esto significa que `Kafka` escucha en ambos
+puertos, `9092` y `9093`. Sin embargo, solo el listener del host debe estar expuesto al host.
+
+![02.png](assets/02.png)
+
+Para configurar esto, se requiere configuración adicional en el archivo `compose.yaml` de `Kafka`. Una vez que se
+sobrescriban algunos valores predeterminados, también se deben especificar otras opciones para que el modo
+`KRaft` funcione.
+
+````yml
+services:
+  s-kafka:
+    image: apache/kafka:4.1.0
+    container_name: c-kafka
+    restart: unless-stopped
+    environment:
+      # Settings required for KRaft mode
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9091
+      # Configure listeners for both docker and host communication
+      KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://s-kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
+      # Listener to use for broker-to-broker communication
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      # Required for a single node cluster
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - '9092:9092'
+````
+
+- `KAFKA_NODE_ID: 1`. Identificador único del nodo Kafka en el clúster. En modo `KRaft`, cada nodo debe tener un ID
+  distinto.
+- `KAFKA_PROCESS_ROLES: broker,controller`. Define los roles que cumple este nodo: `broker` (gestiona mensajes) y
+  `controller` (coordina el clúster). En clústeres pequeños, ambos roles pueden coexistir.
+- `KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER`. Indica qué listener se usará para la comunicación del controller. Debe
+  coincidir con uno definido en `KAFKA_LISTENERS`.
+- `KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9091`. Define los votantes del quorum del controller. En este caso, un
+  solo nodo (ID 1) escuchando en `localhost:9091`. Es obligatorio en modo `KRaft`.
+
+
+- `KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093`. Define los endpoints donde
+  Kafka escuchará conexiones:
+    - `CONTROLLER://localhost:9091`: usado internamente por el controller.
+    - `HOST://0.0.0.0:9092`: escucha en todas las interfaces del host, permitiendo que tu aplicación en el IDE se
+      conecte vía `localhost:9092`.
+    - `DOCKER://0.0.0.0:9093`: también escucha en todas las interfaces, pero será usado por otros contenedores que
+      acceden vía `s-kafka:9093`.
+    - ⚠️ El uso de `0.0.0.0` significa “escuchar en todas las interfaces disponibles”, es decir, aceptar conexiones
+      desde cualquier IP que esté conectada al contenedor. Es equivalente a escribir `:9092` o `:9093`.
+- `KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://s-kafka:9093`. Define cómo Kafka se anuncia a los
+  clientes:
+    - `HOST://localhost:9092`: para que tu aplicación en el IDE se conecte usando `localhost`.
+    - `DOCKER://s-kafka:9093`: para que otros contenedores lo encuentren usando el nombre del servicio (`s-kafka`).
+- `KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT`. Asocia cada listener
+  con el protocolo de seguridad. En este caso, todos usan `PLAINTEXT` (sin `TLS` ni autenticación).
+- `KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER`. Kafka usará el listener `DOCKER` para la comunicación interna entre
+  brokers. Aunque sea un solo nodo, esta variable es obligatoria en modo `KRaft`.
+
+
+- `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1`. Define cuántas réplicas tendrá el tópico de offsets. En clústeres de un
+  solo nodo, debe ser 1 para evitar errores de arranque.
+
+### 🧭 Conectividad según escenario
+
+- Desde el IDE (host): Usa `bootstrap.servers=localhost:9092`
+- Desde otro contenedor: Usa `bootstrap.servers=s-kafka:9093`
+
 ## Creando proyecto: [worker-service](https://start.spring.io/#!type=maven-project&language=java&platformVersion=3.5.5&packaging=jar&jvmVersion=21&groupId=dev.magadiflo&artifactId=worker-service&name=worker-service&description=Demo%20project%20for%20Spring%20Boot&packageName=dev.magadiflo.worker.app&dependencies=webflux,lombok,kafka)
 
 Creamos el proyecto `worker-service` desde spring initializr con las siguientes dependencias.
