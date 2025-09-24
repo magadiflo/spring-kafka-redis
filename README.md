@@ -1349,3 +1349,93 @@ Cuando `Spring` invoca `redissonClient.shutdown()`:
 > Un `memory leak` es cuando tu aplicación reserva memoria pero nunca la libera, causando que se acumule basura hasta
 > agotar la RAM disponible. Por ejemplo: abres 1000 conexiones a Redis pero nunca las cierras → se acumula memoria → tu
 > app se vuelve lenta o se cuelga.
+
+## ⚙️ Configuración del Consumer de Kafka
+
+Para que el `worker-service` pueda recibir mensajes desde `Kafka`, necesitamos configurar un `Consumer` que escuche
+el topic `news-topic` publicado por el `news-service`.
+
+### Configuración del Consumer
+
+````java
+
+@Configuration
+public class KafkaConsumerConfig {
+
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrapServers;
+
+    private Map<String, Object> consumerConfig() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, this.bootstrapServers);
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        return props;
+    }
+
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
+        return new DefaultKafkaConsumerFactory<>(this.consumerConfig());
+    }
+
+    @Bean
+    public KafkaListenerContainerFactory<ConcurrentMessageListenerContainer<String, String>> factory(ConsumerFactory<String, String> consumerFactory) {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(consumerFactory);
+        return factory;
+    }
+}
+````
+
+- `ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG` → dirección del clúster Kafka.
+- `StringDeserializer` → convierte los mensajes recibidos desde Kafka en String.
+- `ConcurrentKafkaListenerContainerFactory` → permite manejar varios consumers en paralelo si se requiere (útil para
+  escalabilidad).
+
+### Constantes globales para Kafka
+
+Centralizamos valores como el nombre del topic y el groupId en una clase de utilidades. Esto evita duplicación y
+errores al momento de usar los nombres en distintas clases.
+
+````java
+
+@UtilityClass
+public class Constants {
+
+    public static final String TOPIC_NEWS = "news-topic";
+    public static final String GROUP_ID_NEWS_TOPIC = "news-consumer-group";
+
+}
+````
+
+- `TOPIC_NEWS` → topic donde se publican las fechas desde `news-service`.
+- `GROUP_ID_NEWS_TOPIC` → identificador del grupo de consumidores que trabajará con ese topic.
+
+> Un mismo `groupId` asegura que cada mensaje se procese una sola vez dentro del grupo (aunque haya varios
+> consumidores).
+
+### Creación del Topic en Kafka
+
+Aunque `Kafka` permite crear topics de forma manual, podemos configurarlo para que Spring los genere automáticamente
+si no existen.
+
+````java
+
+@Configuration
+public class KafkaTopicConfig {
+    @Bean
+    public NewTopic generateTopic() {
+        return TopicBuilder.name(Constants.TOPIC_NEWS).build();
+    }
+}
+````
+
+- Si el topic ya existe en Kafka → esta configuración se ignora.
+- Si no existe → se crea automáticamente con las características indicadas.
+
+📌 Resumen rápido:
+
+- El `KafkaConsumerConfig` define cómo debe comportarse el consumer.
+- La clase `Constants` centraliza configuraciones comunes.
+- `KafkaTopicConfig` asegura que el topic `news-topic` esté disponible al iniciar la aplicación, usando `KafkaAdmin` de
+  forma automática.
