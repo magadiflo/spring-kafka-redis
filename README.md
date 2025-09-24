@@ -1482,3 +1482,70 @@ public class WebClientConfig {
 - `WebClient.Builder` → exponemos un builder en lugar de un `WebClient` directamente, lo que nos da flexibilidad:
     - Podemos personalizar cada instancia (`.defaultHeader(...)`, `.filter(...)`, etc.).
     - Evitamos problemas si más adelante necesitamos múltiples clientes con diferentes URLs.
+
+## Definiendo dtos para el servicio externo de noticias
+
+Cuando consumimos datos desde un API externa (en este caso desde `mediastack`), necesitamos crear clases que
+representen la estructura del `JSON` que recibiremos.
+
+En este proyecto usamos `Java Records`, que son inmutables, concisos y perfectos para este tipo de casos.
+
+DTO `NewsItem`
+
+````java
+public record NewsItem(String author,
+                       String title,
+                       String description,
+                       String url,
+                       String source,
+                       String image,
+                       String category,
+                       String language,
+                       String country,
+                       @JsonProperty("published_at")
+                       String publishedAt) {
+}
+````
+
+- Este record representa cada noticia individual.
+- Se incluyen propiedades típicas de una noticia: `title`, `description`, `url`, `image`, etc.
+- La anotación `@JsonProperty("published_at")` es necesaria porque el nombre del campo en el JSON (`published_at`) no
+  coincide con la convención camelCase en Java (`publishedAt`).
+
+DTO `Pagination`
+
+````java
+public record Pagination(int limit,
+                         int offset,
+                         int count,
+                         int total) {
+}
+````
+
+Representa la sección de paginación que envía el API de noticias, con metadatos como:
+
+- `limit`: cuántos elementos se solicitaron.
+- `offset`: desde qué posición inicia la respuesta.
+- `count`: cuántos resultados fueron devueltos.
+- `total`: total de resultados disponibles.
+
+DTO `NewsResponse`
+
+````java
+public record NewsResponse(Pagination pagination,
+                           @JsonProperty("data")
+                           List<NewsItem> items) {
+}
+````
+
+Representa la respuesta completa del servicio de noticias:
+
+- Incluye la paginación (`pagination`).
+- El campo `data` del JSON se mapea a la lista de noticias (`items`) usando `@JsonProperty("data")`.
+
+### ✅ Resumen
+
+- Usamos Java Records para definir DTOs inmutables y concisos.
+- `@JsonProperty` nos permite mapear nombres de campos JSON que no cumplen con la convención de Java.
+- Esta estructura asegura que el `WebClient` pueda deserializar automáticamente las respuestas JSON del servicio externo
+  a objetos Java, listos para ser usados en la lógica de negocio.
