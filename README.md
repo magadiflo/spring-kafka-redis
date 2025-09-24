@@ -1549,3 +1549,73 @@ Representa la respuesta completa del servicio de noticias:
 - `@JsonProperty` nos permite mapear nombres de campos JSON que no cumplen con la convención de Java.
 - Esta estructura asegura que el `WebClient` pueda deserializar automáticamente las respuestas JSON del servicio externo
   a objetos Java, listos para ser usados en la lógica de negocio.
+
+## Definiendo DAO para persistencia en Redis
+
+En este servicio necesitamos persistir temporalmente la respuesta del API de noticias en `Redis` para:
+
+- Evitar múltiples llamadas innecesarias al servicio externo.
+- Mejorar el rendimiento respondiendo desde cache.
+- Controlar la expiración de los datos (ej. 1 hora).
+
+Para esto usamos `Redisson Reactive`, que se integra muy bien con `WebFlux`.
+
+### Interfaz `NewsDao`
+
+````java
+public interface NewsDao {
+    Mono<Void> saveNews(String date, NewsResponse response);
+}
+````
+
+- Definimos la abstracción de acceso a datos (DAO).
+- El método `saveNews(...)` recibe:
+    - `date`: parte de la clave asociada a la fecha de consulta.
+    - `response`: objeto `NewsResponse` a almacenar en `Redis`.
+- Retorna un `Mono<Void>` porque la operación es reactiva y no devuelve un valor específico (solo la señal de éxito o
+  error).
+
+### Implementación `NewsDaoImpl`
+
+````java
+
+@Slf4j
+@RequiredArgsConstructor
+@Repository
+public class NewsDaoImpl implements NewsDao {
+
+    private final RedissonReactiveClient client;
+    private static final String KEY_NEWS_REDIS = "news:%s";
+    private static final TypedJsonJacksonCodec NEWS_CODEC = new TypedJsonJacksonCodec(NewsResponse.class);
+
+    @Override
+    public Mono<Void> saveNews(String date, NewsResponse response) {
+        String key = KEY_NEWS_REDIS.formatted(date);
+        log.info("Guardando noticia en Redis con clave: {}", key);
+
+        RBucketReactive<NewsResponse> bucket = this.client.getBucket(key, NEWS_CODEC);
+        return bucket.set(response, Duration.ofHours(1L));
+    }
+}
+````
+
+Explicación:
+
+- `RedissonReactiveClient`: cliente reactivo de `Redisson` inyectado en el DAO.
+- `KEY_NEWS_REDIS`: plantilla de la clave que usaremos en Redis (`news:<fecha>`).
+- `TypedJsonJacksonCodec`: codec que permite `serializar/deserializar` `NewsResponse` en formato JSON.
+- `RBucketReactive`: una estructura de `Redis` para guardar un único objeto con `clave/valor`.
+- `bucket.set(response, Duration.ofHours(1L))`: guarda el valor con un `TTL (time-to-live)` de 1 hora.
+
+Beneficios de esta implementación:
+
+- ✅ Totalmente reactiva → se integra de forma no bloqueante con WebFlux.
+- ✅ Uso de codec JSON → Redisson convierte el objeto automáticamente sin necesidad de manual mapping.
+- ✅ TTL configurado → los datos expiran después de 1 hora, garantizando frescura de la información.
+
+📌 Resumen
+
+- Creamos un DAO reactivo para persistir noticias en Redis.
+- Usamos `RBucketReactive` porque se ajusta al patrón de guardar un único objeto por clave.
+- El `TypedJsonJacksonCodec` nos ahorra la conversión manual a JSON.
+- El `TTL` de 1 hora asegura que los datos cacheados no queden obsoletos.
