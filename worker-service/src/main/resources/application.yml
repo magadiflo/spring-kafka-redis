@@ -14,3 +14,8 @@ redisson:
   port: ${REDIS_PORT:6379}
   username: ${REDIS_USERNAME:userdev}
   password: ${REDIS_PASSWORD:pass123}
+
+external:
+  services:
+    news:
+      base-url: https://api.mediastack.com

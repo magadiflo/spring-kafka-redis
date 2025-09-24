@@ -1439,3 +1439,46 @@ public class KafkaTopicConfig {
 - La clase `Constants` centraliza configuraciones comunes.
 - `KafkaTopicConfig` asegura que el topic `news-topic` esté disponible al iniciar la aplicación, usando `KafkaAdmin` de
   forma automática.
+
+## ⚙️ Configuración de WebClient
+
+Para que el `worker-service` pueda comunicarse con el servicio externo `Mediastack`, necesitamos un cliente HTTP
+reactivo. En este caso usaremos `WebClient`, que es el cliente no bloqueante que trae `Spring WebFlux`.
+
+### Configuración en `application.yml`
+
+Agregamos la configuración del servicio externo con su `base-url`. En esta primera versión la URL está hardcodeada,
+pero más adelante podría parametrizarse con variables de entorno.
+
+````yml
+external:
+  services:
+    news:
+      base-url: https://api.mediastack.com
+````
+
+### Clase de configuración
+
+````java
+
+@Configuration
+public class WebClientConfig {
+
+    @Value("${external.services.news.base-url}")
+    private String externalNewsUrl;
+
+    @Bean
+    public WebClient.Builder externalNewsClientBuilder() {
+        return WebClient.builder()
+                .baseUrl(this.externalNewsUrl);
+    }
+}
+````
+
+🔍 Explicación
+
+- `@Configuration` → indica que esta clase define beans de configuración para el contexto de Spring.
+- `@Value(...)` → inyecta el valor definido en `application.yml`.
+- `WebClient.Builder` → exponemos un builder en lugar de un `WebClient` directamente, lo que nos da flexibilidad:
+    - Podemos personalizar cada instancia (`.defaultHeader(...)`, `.filter(...)`, etc.).
+    - Evitamos problemas si más adelante necesitamos múltiples clientes con diferentes URLs.
