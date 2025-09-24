@@ -1224,3 +1224,128 @@ La elección de `Redisson` se debe a que:
 Esto nos permitirá comparar ambos enfoques (`Spring Data Redis` vs. `Redisson`) y entender mejor sus fortalezas en
 distintos escenarios.
 
+## Configurando `application.yml`
+
+En el archivo `application.yml` del proyecto `worker-service` definimos las configuraciones base de la aplicación.
+Además, añadimos propiedades personalizadas para `Redisson`, que utilizaremos para establecer la conexión con `Redis`.
+
+````yml
+server:
+  port: 8081
+  error:
+    include-message: always
+
+spring:
+  application:
+    name: worker-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+redisson:
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  username: ${REDIS_USERNAME:userdev}
+  password: ${REDIS_PASSWORD:pass123}
+````
+
+Con esto:
+
+- La aplicación se ejecutará en el puerto `8081`.
+- Definimos el nombre de la aplicación como `worker-service`.
+- Configuramos el `bootstrap server` de `Kafka`, con la opción de sobreescribirlo a través de variables de entorno.
+- Creamos un bloque de propiedades personalizadas bajo la clave `redisson`, que luego utilizaremos en una clase de
+  configuración para inicializar nuestro `RedissonClient` y `RedissonReactiveClient`.
+
+## ⚙️ Configurando Redisson en `worker-service`
+
+En este microservicio usaremos `Redisson` como cliente para conectarnos a `Redis`. Para ello definimos una clase de
+configuración que registra los `Bean` necesarios.
+
+````java
+
+@Configuration
+public class RedisConfig {
+    @Value("${redisson.host}")
+    private String redisHost;
+
+    @Value("${redisson.port}")
+    private Integer redisPort;
+
+    @Value("${redisson.username}")
+    private String redisUsername;
+
+    @Value("${redisson.password}")
+    private String redisPassword;
+
+    @Bean(destroyMethod = "shutdown")
+    public RedissonClient redissonClient() {
+        Config config = new Config();
+        config.useSingleServer()
+                .setAddress("redis://%s:%s".formatted(this.redisHost, this.redisPort))
+                .setUsername(this.redisUsername)
+                .setPassword(this.redisPassword);
+        return Redisson.create(config);
+    }
+
+    @Bean
+    public RedissonReactiveClient redissonReactiveClient(RedissonClient redissonClient) {
+        return redissonClient.reactive();
+    }
+}
+````
+
+- `RedissonClient` → expone una API imperativa/sincrónica.
+- `RedissonReactiveClient` → expone una API no bloqueante y reactiva, construida sobre Reactor, lo que lo hace
+  compatible con `Spring WebFlux`.
+
+En resumen:
+
+- `RedissonClient` es el bean principal y obligatorio, porque allí configuramos toda la conexión hacia Redis (host,
+  puerto, credenciales, etc.).
+- A partir de este bean, nace el `RedissonReactiveClient`, que simplemente es una "vista reactiva" del cliente base.
+- Esto nos permite tener flexibilidad:
+    - Si en algún punto necesitamos usar APIs imperativas, podemos usar directamente `RedissonClient`.
+    - Para mantenernos 100% no bloqueantes en `Spring WebFlux`, trabajamos con `RedissonReactiveClient`.
+
+De esta manera, garantizamos:
+
+- 🔑 Una única configuración centralizada de Redis.
+- 🚀 Integración fluida con el stack reactivo de Spring.
+- ✅ Cierre seguro de recursos (`shutdown` en el `RedissonClient`) cuando la aplicación se detiene.
+
+### 🔑 ¿Por qué usamos `destroyMethod = "shutdown"`?
+
+Al declarar el `RedissonClient` como `@Bean`, `Spring` se encarga de su ciclo de vida. La propiedad
+`destroyMethod = "shutdown"` asegura que, cuando la aplicación se detenga, `Spring` ejecute automáticamente
+`redissonClient.shutdown()`.
+
+Esto es importante porque `Redisson abre recursos que deben cerrarse explícitamente`:
+
+- 🔄 Threads internos (event loops, timers, pool de conexiones).
+- 🌐 Conexiones TCP activas hacia Redis.
+- 🕑 Operaciones pendientes que de lo contrario quedarían colgadas.
+
+Si no cerramos correctamente el cliente:
+
+- ❌ Podríamos tener fugas de memoria (memory leaks).
+- ❌ La aplicación podría tardar en apagarse o incluso quedarse colgada.
+- ❌ Recursos del sistema (RAM, sockets) quedarían ocupados innecesariamente.
+
+✅ Beneficios de `shutdown()`
+
+Cuando `Spring` invoca `redissonClient.shutdown()`:
+
+- Libera todas las conexiones TCP abiertas.
+- Cierra los thread pools creados por Redisson.
+- Cancela tareas en ejecución o pendientes.
+- Limpia recursos internos en memoria.
+- Garantiza un apagado limpio de la aplicación.
+
+📌 En resumen:
+
+> Es una buena práctica usar `destroyMethod = "shutdown"` en `RedissonClient`, ya que asegura la liberación ordenada
+> de recursos, evitando problemas de estabilidad o consumo excesivo de memoria en tu aplicación.
+>
+> Un `memory leak` es cuando tu aplicación reserva memoria pero nunca la libera, causando que se acumule basura hasta
+> agotar la RAM disponible. Por ejemplo: abres 1000 conexiones a Redis pero nunca las cierras → se acumula memoria → tu
+> app se vuelve lenta o se cuelga.

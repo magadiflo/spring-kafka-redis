@@ -1,3 +1,16 @@
+server:
+  port: 8081
+  error:
+    include-message: always
+
 spring:
   application:
     name: worker-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+redisson:
+  host: ${REDIS_HOST:localhost}
+  port: ${REDIS_PORT:6379}
+  username: ${REDIS_USERNAME:userdev}
+  password: ${REDIS_PASSWORD:pass123}
