@@ -1853,3 +1853,125 @@ Flujo de trabajo:
     - Cualquier excepción se captura y se loguea.
 5. `Suscripción (subscribe())`: necesaria para ejecutar el flujo reactivo, ya que `@KafkaListener` espera un void y no
    gestiona el `Publisher`.
+
+## 🚀 Ejecución y pruebas iniciales del `worker-service`
+
+Al iniciar la aplicación `worker-service`, esta se conecta automáticamente a `Redis` y `Apache Kafka` utilizando las
+configuraciones definidas en el archivo `application.yml`.
+
+En los logs de arranque podemos verificar que:
+
+- La aplicación levantó correctamente.
+- El consumidor de `Kafka` (NewsKafkaConsumer) se suscribió al topic `news-topic` y al grupo `news-consumer-group`.
+- `Redis` fue inicializado y está listo para recibir operaciones.
+
+Ejemplo de log al inicio:
+
+````bash
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.5.5)
+
+2025-09-25T16:06:08.981-05:00  INFO 7676 --- [worker-service] [           main] d.m.worker.app.WorkerServiceApplication  : Starting WorkerServiceApplication using Java 21.0.6 with PID 7676 (D:\programming\spring\02.youtube\09.dev_dominio\spring-kafka-redis\worker-service\target\classes started by magadiflo in D:\programming\spring\02.youtube\09.dev_dominio\spring-kafka-redis)
+2025-09-25T16:06:08.982-05:00  INFO 7676 --- [worker-service] [           main] d.m.worker.app.WorkerServiceApplication  : No active profile set, falling back to 1 default profile: "default"
+2025-09-25T16:06:09.878-05:00  INFO 7676 --- [worker-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2025-09-25T16:06:09.888-05:00  INFO 7676 --- [worker-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2025-09-25T16:06:09.926-05:00  INFO 7676 --- [worker-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 16 ms. Found 0 Redis repository interfaces.
+2025-09-25T16:06:10.940-05:00  INFO 7676 --- [worker-service] [           main] org.redisson.Version                     : Redisson 3.51.0
+2025-09-25T16:06:11.464-05:00  INFO 7676 --- [worker-service] [isson-netty-3-6] o.redisson.connection.ConnectionsHolder  : 1 connections initialized for localhost/127.0.0.1:6379
+2025-09-25T16:06:11.604-05:00  INFO 7676 --- [worker-service] [sson-netty-3-20] o.redisson.connection.ConnectionsHolder  : 24 connections initialized for localhost/127.0.0.1:6379
+2025-09-25T16:06:12.942-05:00  INFO 7676 --- [worker-service] [           main] o.a.k.clients.admin.AdminClientConfig    : AdminClientConfig values: 
+	auto.include.jmx.reporter = true
+	...
+	ssl.truststore.type = JKS
+
+2025-09-25T16:06:13.205-05:00  INFO 7676 --- [worker-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka version: 3.9.1
+2025-09-25T16:06:13.205-05:00  INFO 7676 --- [worker-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka commitId: f745dfdcee2b9851
+2025-09-25T16:06:13.205-05:00  INFO 7676 --- [worker-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka startTimeMs: 1758834373202
+2025-09-25T16:06:13.876-05:00  INFO 7676 --- [worker-service] [service-admin-0] o.a.kafka.common.utils.AppInfoParser     : App info kafka.admin.client for worker-service-admin-0 unregistered
+2025-09-25T16:06:13.883-05:00  INFO 7676 --- [worker-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Metrics scheduler closed
+2025-09-25T16:06:13.883-05:00  INFO 7676 --- [worker-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Closing reporter org.apache.kafka.common.metrics.JmxReporter
+2025-09-25T16:06:13.883-05:00  INFO 7676 --- [worker-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Metrics reporters closed
+2025-09-25T16:06:13.937-05:00  INFO 7676 --- [worker-service] [           main] o.s.b.web.embedded.netty.NettyWebServer  : Netty started on port 8081 (http)
+2025-09-25T16:06:13.970-05:00  INFO 7676 --- [worker-service] [           main] o.a.k.clients.consumer.ConsumerConfig    : ConsumerConfig values: 
+	allow.auto.create.topics = true
+	...
+	value.deserializer = class org.apache.kafka.common.serialization.StringDeserializer
+
+2025-09-25T16:06:14.035-05:00  INFO 7676 --- [worker-service] [           main] o.a.k.c.t.i.KafkaMetricsCollector        : initializing Kafka metrics collector
+2025-09-25T16:06:14.109-05:00  INFO 7676 --- [worker-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka version: 3.9.1
+2025-09-25T16:06:14.109-05:00  INFO 7676 --- [worker-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka commitId: f745dfdcee2b9851
+2025-09-25T16:06:14.109-05:00  INFO 7676 --- [worker-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka startTimeMs: 1758834374109
+2025-09-25T16:06:14.110-05:00  INFO 7676 --- [worker-service] [           main] o.a.k.c.c.i.ClassicKafkaConsumer         : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Subscribed to topic(s): news-topic
+2025-09-25T16:06:14.141-05:00  INFO 7676 --- [worker-service] [           main] d.m.worker.app.WorkerServiceApplication  : Started WorkerServiceApplication in 6.085 seconds (process running for 6.903)
+2025-09-25T16:06:14.169-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] org.apache.kafka.clients.Metadata        : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Cluster ID: 5L6g3nShT-eMCtK--X86sw
+2025-09-25T16:06:14.173-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Discovered group coordinator localhost:9092 (id: 2147483646 rack: null)
+2025-09-25T16:06:14.176-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] (Re-)joining group
+2025-09-25T16:06:14.208-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Request joining group due to: need to re-join with the given member-id: consumer-news-consumer-group-1-e1d02e95-001e-4e50-9c8e-0782c370219a
+2025-09-25T16:06:14.208-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] (Re-)joining group
+2025-09-25T16:06:17.010-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Successfully joined group with generation Generation{generationId=1, memberId='consumer-news-consumer-group-1-e1d02e95-001e-4e50-9c8e-0782c370219a', protocol='range'}
+2025-09-25T16:06:17.018-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Finished assignment for group at generation 1: {consumer-news-consumer-group-1-e1d02e95-001e-4e50-9c8e-0782c370219a=Assignment(partitions=[news-topic-0])}
+2025-09-25T16:06:17.032-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Successfully synced group in generation Generation{generationId=1, memberId='consumer-news-consumer-group-1-e1d02e95-001e-4e50-9c8e-0782c370219a', protocol='range'}
+2025-09-25T16:06:17.032-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Notifying assignor about the new Assignment(partitions=[news-topic-0])
+2025-09-25T16:06:17.034-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] k.c.c.i.ConsumerRebalanceListenerInvoker : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Adding newly assigned partitions: news-topic-0
+2025-09-25T16:06:17.044-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Found no committed offset for partition news-topic-0
+2025-09-25T16:06:17.049-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.ConsumerCoordinator  : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Found no committed offset for partition news-topic-0
+2025-09-25T16:06:17.067-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.SubscriptionState    : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Resetting offset for partition news-topic-0 to position FetchPosition{offset=1, offsetEpoch=Optional.empty, currentLeader=LeaderAndEpoch{leader=Optional[localhost:9092 (id: 1 rack: null)], epoch=10}}.
+2025-09-25T16:06:17.091-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] o.s.k.l.KafkaMessageListenerContainer    : news-consumer-group: partitions assigned: [news-topic-0]
+````
+
+## 📤 Enviar manualmente un mensaje al tópico `news-topic`
+
+Para probar el flujo, enviamos manualmente una fecha en formato `yyyy-MM-dd` al topic `news-topic` de `Kafka`:
+
+````bash
+$ docker container exec -it c-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic news-topic
+>2025-09-25
+>
+````
+
+### 📜 Observar el procesamiento en los logs
+
+Al recibir el mensaje, el `worker-service` sigue este flujo:
+
+1. `Kafka Listener` recibe la fecha.
+2. Se consulta `Redis` para verificar si ya existe la noticia cacheada.
+3. Como no existe, se consulta la API externa `MediaStack`.
+4. El resultado se almacena en `Redis` con clave `news:2025-09-25`.
+5. Finalmente, se confirma que el procesamiento fue exitoso.
+
+Ejemplo de logs:
+
+````bash
+2025-09-25T16:15:16.856-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] d.m.w.app.listener.NewsKafkaConsumer     : Recibiendo fecha desde Kafka: 2025-09-25
+2025-09-25T16:15:16.861-05:00  INFO 7676 --- [worker-service] [ntainer#0-0-C-1] d.m.worker.app.dao.impl.NewsDaoImpl      : Consultando noticia en Redis con clave: news:2025-09-25
+2025-09-25T16:15:16.908-05:00  INFO 7676 --- [worker-service] [isson-netty-3-3] d.m.w.app.listener.NewsKafkaConsumer     : No existe noticia en Redis para fecha: 2025-09-25, consultando API externa
+2025-09-25T16:15:16.908-05:00  INFO 7676 --- [worker-service] [isson-netty-3-3] d.m.w.a.client.MediaStackServiceClient   : Consultando noticias en MediaStack para la fecha: 2025-09-25
+2025-09-25T16:15:19.226-05:00  INFO 7676 --- [worker-service] [ctor-http-nio-3] d.m.worker.app.dao.impl.NewsDaoImpl      : Guardando noticia en Redis con clave: news:2025-09-25
+2025-09-25T16:15:19.246-05:00  INFO 7676 --- [worker-service] [isson-netty-3-7] d.m.w.app.listener.NewsKafkaConsumer     : Procesamiento completado exitosamente para fecha: 2025-09-25
+````
+
+### 🔍 Verificar en `Redis` que la noticia fue almacenada
+
+Entramos al contenedor de `Redis`, nos autenticamos con las credenciales definidas en el `compose.yml` y validamos que
+la noticia fue almacenada bajo la clave esperada:
+
+````bash
+D:\programming\spring\02.youtube\09.dev_dominio\spring-kafka-redis (main -> origin)
+λ docker container exec -it c-redis /bin/sh
+/data # redis-cli
+127.0.0.1:6379> keys *
+(error) NOAUTH Authentication required.
+127.0.0.1:6379> auth userdev pass123
+OK
+127.0.0.1:6379> keys *
+1) "news:2025-09-25"
+127.0.0.1:6379> get news:2025-09-25
+"{\"data\":[{\"author\":\"Redacci\xc3\xb3n EC\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"Loter\xc3\xada Nacional EN DIRECTO: Comprueba aqu\xc3\xad los n\xc3\xbameros ganadores de la Loter\xc3\xada Nacional del jueves 25 de septiembre. Tambi\xc3\xa9n revisa los resultados de Bonoloto, La Primitiva y Joker.\",\"image\":\"https://elcomercio.pe/resizer/v2/Q6CZ4B65DBELXA6ZL473C75LSA.jpeg?width=1380&height=823&auth=1a8e5e4b3b13510b1a42414073f2edc7d0d10fa3ef8d6f8218a5d02d883dc974&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:42:39+00:00\",\"source\":\"elcomercio\",\"title\":\"Resultados Loter\xc3\xada Nacional de Espa\xc3\xb1a: comprobar d\xc3\xa9cimos del 25 de septiembre\",\"url\":\"https://elcomercio.pe/respuestas/espana/loteria-nacional-de-espana-en-vivo-resultados-hoy-jueves-25-de-septiembre-de-2025-numeros-ganadores-y-decimos-loterias-y-apuestas-del-estado-joker-primitiva-espana-madrid-es-lbposting-noticia/\"},{\"author\":\"Jorge Villanes\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"La joyer\xc3\xada Heller de San Ram\xc3\xb3n, California, fue v\xc3\xadctima de un robo masivo: aproximadamente 25 asaltantes se llevaron joyas valoradas en casi un mill\xc3\xb3n de d\xc3\xb3lares.\",\"image\":\"https://elcomercio.pe/resizer/v2/2CWM776UORHH7L5I7YG4SKYFUY.jpg?width=1200&height=750&auth=638e421ac05e6e52ed4c1c35d3e44d27cf39504fb5f786bdcc0c4511d854653c&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:42:02+00:00\",\"source\":\"elcomercio\",\"title\":\"Impactante asalto de 20 encapuchados a una joyer\xc3\xada en California: esto es lo que se sabe\",\"url\":\"https://elcomercio.pe/mag/usa/local-us/impactante-asalto-de-20-encapuchados-a-una-joyeria-en-california-esto-es-lo-que-se-sabe-nnda-nnrt-noticia/\"},{\"author\":\"Renato Cardenas C.\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"En 2025 solo municipios fronterizos aplicar\xc3\xa1n el cambio. Descubre cu\xc3\xa1ndo termina el horario de verano y c\xc3\xb3mo afectar\xc3\xa1 el ajuste del reloj en M\xc3\xa9xico.\",\"image\":\"https://elcomercio.pe/resizer/v2/JXOQXCP65RHQDBAF5VV6DB6V6U.jpg?width=2400&height=1600&auth=7958eeb1eeb841fb008349354982b4b6814184dfcd0034e63a2abd6d07b47d2e&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:32:01+00:00\",\"source\":\"elcomercio\",\"title\":\"\xe2\x96\xb6 Cambio de horario en M\xc3\xa9xico 2025: fecha de fin del horario de verano y cu\xc3\xa1ntas horas debes atrasar el reloj\",\"url\":\"https://elcomercio.pe/mag/respuestas/mx/cambio-de-horario-en-mexico-2025-cuando-termina-el-verano-y-cuantas-horas-hay-que-retrasar-el-reloj-nnda-nnse-noticia/\"},{\"author\":\"Redacci\xc3\xb3n EC\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"Con versiones estandar, Pro y Pro Max, la respuesta de Xiaomi al tel\xc3\xa9fono de bandera de Apple est\xc3\xa1 disponible a partir del 27 de septiembre.\",\"image\":\"https://elcomercio.pe/resizer/v2/YLJWDDDTRFCHFPWIGRLWZRFSLY.jpg?width=1200&height=800&auth=bc82996798634ea5911269e250b6e96489d57434e390fa2fd60db797d74c0099&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:32:00+00:00\",\"source\":\"elcomercio\",\"title\":\"Xiaomi 17: la apuesta de la compa\xc3\xb1\xc3\xada para competir con el iPhone 17\",\"url\":\"https://elcomercio.pe/tecnologia/moviles/xiaomi-17-la-apuesta-de-la-compania-para-competir-con-el-iphone-17-noticia/\"},{\"author\":\"Redacci\xc3\xb3n Mix\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"Cu\xc3\xa1ndo se estrena el Episodio 11 de \xe2\x80\x9cKaiju No.8\xe2\x80\x9d - Temporada 2: fecha, hora y link para verlo.\",\"image\":\"https://gestion.pe/resizer/v2/NQFRRYVASNGZJF7YJXIEAZP6B4.jpg?width=2320&height=1320&auth=12cf33c1d908f77d72e2936c0591e3ec44ebafb175bed4a4f5bafd5aa1a49227&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:26:03+00:00\",\"source\":\"gestion\",\"title\":\"Cu\xc3\xa1ndo se estrena el Episodio 11 de \xe2\x80\x9cKaiju No. 8\xe2\x80\x9d - Temporada 2: fecha, hora y link para verlo\",\"url\":\"https://gestion.pe/mix/tendencias-mix/kaiju-no-8-temporada-2-episodio-11-online-fecha-hora-y-link-para-ver-el-anime-de-crunchyroll-noticia/\"}],\"pagination\":{\"count\":5,\"limit\":5,\"offset\":0,\"total\":151}}"
+127.0.0.1:6379> 
+````
