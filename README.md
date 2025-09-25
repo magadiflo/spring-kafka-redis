@@ -1685,3 +1685,90 @@ public class ApplicationExceptions {
     }
 }
 ````
+
+## Definiendo componente del servicio externo
+
+En este apartado creamos el componente `MediaStackServiceClient`, que será el encargado de comunicarse con el servicio
+externo de noticias `MediaStack API`.
+
+La URL base de `MediaStack` que consumiremos es:
+
+````bash
+https://api.mediastack.com/v1/news?access_key=922887e602f7b3a4cdebdd6b3fd7a2c6&limit=5&countries=pe&date=2025-09-22
+````
+
+### Implementación del Cliente
+
+````java
+
+@Slf4j
+@Component
+public class MediaStackServiceClient {
+
+    private static final String ACCESS_KEY = "922887e602f7b3a4cdebdd6b3fd7a2c6";
+    private static final String COUNTRIES = "pe";
+    private static final int LIMIT = 5;
+
+    private final WebClient client;
+
+    public MediaStackServiceClient(WebClient.Builder builder) {
+        this.client = builder.build();
+    }
+
+    public Mono<NewsResponse> getNews(String date) {
+        log.info("Consultando noticias en MediaStack para la fecha: {}", date);
+        return this.client.get()
+                .uri("/v1/news", uriBuilder -> uriBuilder
+                        .queryParam("access_key", ACCESS_KEY)
+                        .queryParam("limit", LIMIT)
+                        .queryParam("countries", COUNTRIES)
+                        .queryParam("date", date)
+                        .build())
+                .retrieve()
+                .bodyToMono(NewsResponse.class)
+                .onErrorResume(WebClientResponseException.NotFound.class, exception -> {
+                    log.warn("No se encontraron noticias en MediaStack para la fecha: {}. Código HTTP: {}, mensaje: {}",
+                            date, exception.getStatusCode(), exception.getMessage());
+                    return ApplicationExceptions.externalNewsNotFound(date);
+                })
+                .onErrorResume(WebClientResponseException.BadRequest.class, exception -> {
+                    log.error("Solicitud inválida al API de MediaStack. Fecha: {}, código HTTP: {}, mensaje: {}",
+                            date, exception.getStatusCode(), exception.getMessage());
+                    return ApplicationExceptions.externalInvalidNewsRequest(exception.getMessage());
+                })
+                .onErrorResume(throwable -> {
+                    log.error("Error inesperado consultando MediaStack. Fecha: {}, tipo: {}, mensaje: {}",
+                            date, throwable.getClass().getSimpleName(), throwable.getMessage());
+                    return ApplicationExceptions.externalServiceError(throwable.getMessage());
+                });
+    }
+}
+````
+
+1. Uso de `WebClient`
+    - Inyectamos `WebClient.Builder` desde el contexto de Spring y lo construimos en el constructor.
+    - Esto garantiza que respete la configuración centralizada (`baseUrl` definida en `WebClientConfig`).
+
+2. Parámetros de consulta (`queryParam`)
+    - `access_key`: clave de autenticación de MediaStack.
+    - `limit`: límite de noticias a traer (en este caso 5).
+    - `countries`: país filtrado (ejemplo pe).
+    - `date`: fecha solicitada.
+
+3. Manejo de errores
+    - `404 Not Found` → `ExternalNewsNotFoundException`
+    - `400 Bad Request` → `ExternalInvalidNewsRequestException`
+    - Cualquier otro error → `ExternalServiceException`
+    - Cada uno se propaga como `Mono.error(...)` mediante la clase utilitaria `ApplicationExceptions`.
+
+4. Logging enriquecido
+    - Se registran logs en distintos niveles (`info`, `warn`, `error`) según el tipo de respuesta, lo que facilita el
+      troubleshooting.
+
+### Resumen
+
+- Este componente encapsula la comunicación con MediaStack.
+- Usa WebClient (no bloqueante) y retorna un `Mono<NewsResponse>` acorde al stack reactivo.
+- Incluye manejo de errores robusto con excepciones personalizadas.
+- Es el punto central de integración con el servicio externo y será usado más adelante por la lógica de negocio del
+  `worker-service`.
