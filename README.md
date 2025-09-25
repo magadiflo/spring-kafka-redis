@@ -864,7 +864,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NewsNotFoundException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleNewsNotFoundException(NewsNotFoundException e) {
-        log.error("{}", e.getMessage(), e);
+        log.error("{}", e.getMessage());
         return this.buildErrorResponse(
                 HttpStatus.NOT_FOUND,
                 ErrorCatalog.NEWS_NOT_FOUND,
@@ -874,7 +874,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<ErrorResponse>> handleGenericException(Exception e) {
-        log.error("Excepción General: {}", e.getMessage(), e);
+        log.error("Excepción General: {}", e.getMessage());
         return this.buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 ErrorCatalog.INTERNAL_SERVER_ERROR,
@@ -1975,3 +1975,165 @@ OK
 "{\"data\":[{\"author\":\"Redacci\xc3\xb3n EC\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"Loter\xc3\xada Nacional EN DIRECTO: Comprueba aqu\xc3\xad los n\xc3\xbameros ganadores de la Loter\xc3\xada Nacional del jueves 25 de septiembre. Tambi\xc3\xa9n revisa los resultados de Bonoloto, La Primitiva y Joker.\",\"image\":\"https://elcomercio.pe/resizer/v2/Q6CZ4B65DBELXA6ZL473C75LSA.jpeg?width=1380&height=823&auth=1a8e5e4b3b13510b1a42414073f2edc7d0d10fa3ef8d6f8218a5d02d883dc974&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:42:39+00:00\",\"source\":\"elcomercio\",\"title\":\"Resultados Loter\xc3\xada Nacional de Espa\xc3\xb1a: comprobar d\xc3\xa9cimos del 25 de septiembre\",\"url\":\"https://elcomercio.pe/respuestas/espana/loteria-nacional-de-espana-en-vivo-resultados-hoy-jueves-25-de-septiembre-de-2025-numeros-ganadores-y-decimos-loterias-y-apuestas-del-estado-joker-primitiva-espana-madrid-es-lbposting-noticia/\"},{\"author\":\"Jorge Villanes\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"La joyer\xc3\xada Heller de San Ram\xc3\xb3n, California, fue v\xc3\xadctima de un robo masivo: aproximadamente 25 asaltantes se llevaron joyas valoradas en casi un mill\xc3\xb3n de d\xc3\xb3lares.\",\"image\":\"https://elcomercio.pe/resizer/v2/2CWM776UORHH7L5I7YG4SKYFUY.jpg?width=1200&height=750&auth=638e421ac05e6e52ed4c1c35d3e44d27cf39504fb5f786bdcc0c4511d854653c&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:42:02+00:00\",\"source\":\"elcomercio\",\"title\":\"Impactante asalto de 20 encapuchados a una joyer\xc3\xada en California: esto es lo que se sabe\",\"url\":\"https://elcomercio.pe/mag/usa/local-us/impactante-asalto-de-20-encapuchados-a-una-joyeria-en-california-esto-es-lo-que-se-sabe-nnda-nnrt-noticia/\"},{\"author\":\"Renato Cardenas C.\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"En 2025 solo municipios fronterizos aplicar\xc3\xa1n el cambio. Descubre cu\xc3\xa1ndo termina el horario de verano y c\xc3\xb3mo afectar\xc3\xa1 el ajuste del reloj en M\xc3\xa9xico.\",\"image\":\"https://elcomercio.pe/resizer/v2/JXOQXCP65RHQDBAF5VV6DB6V6U.jpg?width=2400&height=1600&auth=7958eeb1eeb841fb008349354982b4b6814184dfcd0034e63a2abd6d07b47d2e&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:32:01+00:00\",\"source\":\"elcomercio\",\"title\":\"\xe2\x96\xb6 Cambio de horario en M\xc3\xa9xico 2025: fecha de fin del horario de verano y cu\xc3\xa1ntas horas debes atrasar el reloj\",\"url\":\"https://elcomercio.pe/mag/respuestas/mx/cambio-de-horario-en-mexico-2025-cuando-termina-el-verano-y-cuantas-horas-hay-que-retrasar-el-reloj-nnda-nnse-noticia/\"},{\"author\":\"Redacci\xc3\xb3n EC\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"Con versiones estandar, Pro y Pro Max, la respuesta de Xiaomi al tel\xc3\xa9fono de bandera de Apple est\xc3\xa1 disponible a partir del 27 de septiembre.\",\"image\":\"https://elcomercio.pe/resizer/v2/YLJWDDDTRFCHFPWIGRLWZRFSLY.jpg?width=1200&height=800&auth=bc82996798634ea5911269e250b6e96489d57434e390fa2fd60db797d74c0099&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:32:00+00:00\",\"source\":\"elcomercio\",\"title\":\"Xiaomi 17: la apuesta de la compa\xc3\xb1\xc3\xada para competir con el iPhone 17\",\"url\":\"https://elcomercio.pe/tecnologia/moviles/xiaomi-17-la-apuesta-de-la-compania-para-competir-con-el-iphone-17-noticia/\"},{\"author\":\"Redacci\xc3\xb3n Mix\",\"category\":\"general\",\"country\":\"pe\",\"description\":\"Cu\xc3\xa1ndo se estrena el Episodio 11 de \xe2\x80\x9cKaiju No.8\xe2\x80\x9d - Temporada 2: fecha, hora y link para verlo.\",\"image\":\"https://gestion.pe/resizer/v2/NQFRRYVASNGZJF7YJXIEAZP6B4.jpg?width=2320&height=1320&auth=12cf33c1d908f77d72e2936c0591e3ec44ebafb175bed4a4f5bafd5aa1a49227&smart=true\",\"language\":\"es\",\"published_at\":\"2025-09-25T20:26:03+00:00\",\"source\":\"gestion\",\"title\":\"Cu\xc3\xa1ndo se estrena el Episodio 11 de \xe2\x80\x9cKaiju No. 8\xe2\x80\x9d - Temporada 2: fecha, hora y link para verlo\",\"url\":\"https://gestion.pe/mix/tendencias-mix/kaiju-no-8-temporada-2-episodio-11-online-fecha-hora-y-link-para-ver-el-anime-de-crunchyroll-noticia/\"}],\"pagination\":{\"count\":5,\"limit\":5,\"offset\":0,\"total\":151}}"
 127.0.0.1:6379> 
 ````
+
+## 🚀 Prueba de integración: `worker-service` + `worker-service` + `Kafka` + `Redis` + `MediaStack`
+
+En esta prueba verificamos el flujo completo del sistema de noticias, desde la petición del cliente hasta la
+persistencia en `Redis` y la consulta a la `API externa MediaStack`.
+
+### 1. Primera petición (Cache MISS)
+
+Hacemos una petición al `news-service` solicitando noticias para la fecha `2025-09-23`:
+
+````bash
+$ curl -v http://localhost:8080/api/v1/news?date=2025-09-23 | jq
+>
+< HTTP/1.1 404 Not Found
+< Content-Type: application/json
+< Content-Length: 259
+<
+{
+  "code": "NEWS_MS_201",
+  "message": "Noticia no encontrada",
+  "errorType": "FUNCTIONAL",
+  "details": [
+    "La noticia solicitada para la fecha [2025-09-23] aún no está disponible. Por favor, intente nuevamente en unos momentos"
+  ],
+  "timestamp": "2025-09-25T16:39:34.8370886"
+}
+````
+
+📌 El `news-service` no encontró datos en cache, por lo que:
+
+- Publica la fecha en `Kafka` (`news-topic`).
+- Devuelve un `404 Not Found` al cliente (mientras el `worker-service` procesa la información).
+
+````bash
+2025-09-25T16:39:34.831-05:00  INFO 1428 --- [news-service] [ioEventLoop-7-1] d.m.n.app.service.impl.NewsServiceImpl   : Cache MISS - Publicando fecha 2025-09-23 en Kafka
+2025-09-25T16:39:34.837-05:00 ERROR 1428 --- [news-service] [vice-producer-1] d.m.n.app.advice.GlobalExceptionHandler  : La noticia solicitada para la fecha [2025-09-23] aún no está disponible. Por favor, intente nuevamente en unos momentos 
+````
+
+### 2. Procesamiento en `worker-service`
+
+El `worker-service recibe` el mensaje desde Kafka y sigue este flujo:
+
+````bash
+2025-09-25T16:39:34.836-05:00  INFO 16348 --- [worker-service] [ntainer#0-0-C-1] d.m.w.app.listener.NewsKafkaConsumer     : Recibiendo fecha desde Kafka: 2025-09-23
+2025-09-25T16:39:34.837-05:00  INFO 16348 --- [worker-service] [ntainer#0-0-C-1] d.m.worker.app.dao.impl.NewsDaoImpl      : Consultando noticia en Redis con clave: news:2025-09-23
+2025-09-25T16:39:34.839-05:00  INFO 16348 --- [worker-service] [isson-netty-3-9] d.m.w.app.listener.NewsKafkaConsumer     : No existe noticia en Redis para fecha: 2025-09-23, consultando API externa
+2025-09-25T16:39:34.839-05:00  INFO 16348 --- [worker-service] [isson-netty-3-9] d.m.w.a.client.MediaStackServiceClient   : Consultando noticias en MediaStack para la fecha: 2025-09-23
+2025-09-25T16:39:35.843-05:00  INFO 16348 --- [worker-service] [ctor-http-nio-3] d.m.worker.app.dao.impl.NewsDaoImpl      : Guardando noticia en Redis con clave: news:2025-09-23
+2025-09-25T16:39:35.850-05:00  INFO 16348 --- [worker-service] [sson-netty-3-11] d.m.w.app.listener.NewsKafkaConsumer     : Procesamiento completado exitosamente para fecha: 2025-09-23
+````
+
+✔️ `Resultado`: la noticia fue consultada en `MediaStack` y almacenada en Redis con `TTL = 1 hora`.
+
+### Validación en Redis
+
+Al consultar directamente `Redis`, confirmamos que la noticia fue almacenada correctamente:
+
+````bash
+$ 127.0.0.1:6379> keys *
+1) "news:2025-09-23"
+2) "news:2025-09-25"
+3) "news:2025-09-24"
+127.0.0.1:6379>
+````
+
+### Segunda petición (Cache HIT)
+
+Volvemos a solicitar la misma fecha desde el `news-service`:
+
+````bash
+$ curl -v http://localhost:8080/api/v1/news?date=2025-09-23 | jq
+>
+< HTTP/1.1 200 OK
+< Content-Type: application/json
+< Content-Length: 3441
+<
+{
+  "message": "Datos encontrados",
+  "status": true,
+  "data": {
+    "pagination": {
+      "limit": 5,
+      "offset": 0,
+      "count": 5,
+      "total": 240
+    },
+    "data": [
+      {
+        "author": "Arelia Luna",
+        "title": "Adulto mayor muere tras caer del segundo piso de su casa en Huánuco",
+        "description": "Nada pudieron hacer para prevenir la desgracia",
+        "url": "https://diariocorreo.pe/edicion/huanuco/adulto-mayor-muere-tras-caer-del-segundo-piso-de-su-casa-en-huanuco-noticia/",
+        "source": "diariocorreo",
+        "image": "https://diariocorreo.pe/resizer/v2/KV3MWLQIHRFBNEEZNSWWGHTUC4.jpeg?width=732&height=732&auth=bdb5abb16b412a45ed21ee6332a554c2eddca6a631c3e6f0c4381b471078515e&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-23T23:58:55+00:00"
+      },
+      {
+        "author": "Redacción EC",
+        "title": "Minam alerta que la minería ilegal contamina ríos con mercurio y amenaza la seguridad hídrica del país",
+        "description": "Más de 3,000 toneladas de mercurio han sido arrojadas a los ríos peruanos en 20 años.",
+        "url": "https://elcomercio.pe/economia/minam-alerta-que-la-mineria-ilegal-contamina-rios-con-mercurio-y-amenaza-la-seguridad-hidrica-del-pais-ultimas-noticia/",
+        "source": "elcomercio",
+        "image": "https://elcomercio.pe/resizer/v2/LQKMCPKPKNA35B4UE66SKCYUW4.jpg?width=1200&height=800&auth=27d5f44a2c3c2700590441fbbb9c7f615f6757d3f6b3762c440d88c8e580bd64&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-23T23:57:31+00:00"
+      },
+      {
+        "author": "Andrea Pereyra",
+        "title": "Wilson Soto pide al Minem evaluar salida de Alejandro Narváez de Petroperú tras emisión de bonos",
+        "description": "El legislador argumenta que existen contradicciones entre los compromisos asumidos públicamente por el funcionario y las decisiones financieras más recientes de la empresa estatal.",
+        "url": "https://diariocorreo.pe/politica/wilson-soto-minem-salida-alejandro-narvaez-petroperu-emision-bonos-peru-noticia/",
+        "source": "diariocorreo",
+        "image": "https://diariocorreo.pe/resizer/v2/OXOLCNA4A5FV7GEA3NNR2GBCMQ.jpg?width=1280&height=720&auth=096399e27d4ab2b6f518f3121c0a4897b2cab9c544de298c2fe372aaa9d16b6d&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-23T23:57:25+00:00"
+      },
+      {
+        "author": "Redacción Diario Correo",
+        "title": "Shirley Arica minimiza a Xiomy Kanashiro, actual pareja de Jefferson Farfán: “¿Quién es?”",
+        "description": "“No sé la verdad, no la he visto”, expresó la modelo cuando le consultaron por la novia del exfutbolista.",
+        "url": "https://diariocorreo.pe/espectaculos/shirley-arica-minimiza-a-xiomy-kanashiro-actual-pareja-de-jefferson-farfan-quien-es-noticia/",
+        "source": "diariocorreo",
+        "image": "https://diariocorreo.pe/resizer/v2/TZT2F7Q3OFERBIFQXCZ622QEZQ.png?width=1280&height=720&auth=55da0443e999e64f8bce8a52a57ba652da0a4d596853e9724cd725653423a20a&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-23T23:56:49+00:00"
+      },
+      {
+        "author": "Arelia Luna",
+        "title": "Huánuco: prisión para presunto violador de menor de edad",
+        "description": "Tendrá que comparecer ante la justicia",
+        "url": "https://diariocorreo.pe/edicion/huanuco/huanuco-prision-para-presunto-violador-de-menor-de-edad-noticia/",
+        "source": "diariocorreo",
+        "image": "https://diariocorreo.pe/resizer/v2/CJLDXWUGKFDVXO4IR376DMGLDE.jpeg?width=1600&height=900&auth=cced3abc9874938355a4990e3d4e849425e5246337b011e17d19b8ee368803f4&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-23T23:50:22+00:00"
+      }
+    ]
+  }
+}
+````
+
+📌 Ahora la respuesta es inmediata porque los datos provienen de `Redis (cache hit)`, sin necesidad de consultar
+`MediaStack` nuevamente.
+
+### ✅ Conclusión
+
+- El sistema funciona de manera `reactiva y desacoplada`:
+    - `news-service` → publica fechas en Kafka y responde rápido al cliente.
+    - `worker-service` → procesa asincrónicamente, consulta `MediaStack` y persiste en `Redis`.
+- `Redis` actúa como cache con TTL, optimizando futuras consultas.
+- `Kafka` asegura la comunicación confiable entre microservicios.

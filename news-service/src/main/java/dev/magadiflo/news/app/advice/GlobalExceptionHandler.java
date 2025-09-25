@@ -39,7 +39,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NewsNotFoundException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleNewsNotFoundException(NewsNotFoundException e) {
-        log.error("{}", e.getMessage(), e);
+        log.error("{}", e.getMessage());
         return this.buildErrorResponse(
                 HttpStatus.NOT_FOUND,
                 ErrorCatalog.NEWS_NOT_FOUND,
@@ -49,7 +49,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<ErrorResponse>> handleGenericException(Exception e) {
-        log.error("Excepción General: {}", e.getMessage(), e);
+        log.error("Excepción General: {}", e.getMessage());
         return this.buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 ErrorCatalog.INTERNAL_SERVER_ERROR,
