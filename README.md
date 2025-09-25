@@ -1565,16 +1565,27 @@ Para esto usamos `Redisson Reactive`, que se integra muy bien con `WebFlux`.
 
 ````java
 public interface NewsDao {
+    Mono<NewsResponse> getNews(String date);
+
     Mono<Void> saveNews(String date, NewsResponse response);
 }
 ````
 
-- Definimos la abstracción de acceso a datos (DAO).
-- El método `saveNews(...)` recibe:
-    - `date`: parte de la clave asociada a la fecha de consulta.
-    - `response`: objeto `NewsResponse` a almacenar en `Redis`.
-- Retorna un `Mono<Void>` porque la operación es reactiva y no devuelve un valor específico (solo la señal de éxito o
-  error).
+1. `Mono<NewsResponse> getNews(String date)`
+    - Recupera una noticia almacenada en Redis, asociada a la clave generada con la fecha indicada.
+    - Si no existe la noticia, retornará un `Mono.empty()`.
+    - Parámetros:
+        - `date`: fecha de las noticias solicitadas, usada como parte de la clave en Redis.
+    - Retorno: `Mono<NewsResponse>` con los datos de la noticia, o vacío si no se encuentra.
+
+2. `Mono<Void> saveNews(String date, NewsResponse response)`
+    - Persiste la respuesta de noticias en Redis.
+    - La clave sigue el patrón `news:{date}`.
+    - Usualmente se establece un TTL (ej. 1 hora) para evitar datos obsoletos.
+    - Parámetros:
+        - `date`: fecha que forma parte de la clave en Redis.
+        - `response`: objeto `NewsResponse` con las noticias a guardar.
+    - Retorno: `Mono<Void>` que indica solo éxito o error (no retorna un valor).
 
 ### Implementación `NewsDaoImpl`
 
@@ -1590,36 +1601,59 @@ public class NewsDaoImpl implements NewsDao {
     private static final TypedJsonJacksonCodec NEWS_CODEC = new TypedJsonJacksonCodec(NewsResponse.class);
 
     @Override
+    public Mono<NewsResponse> getNews(String date) {
+        String key = getRedisKey(date);
+        log.info("Consultando noticia en Redis con clave: {}", key);
+
+        RBucketReactive<NewsResponse> bucket = this.client.getBucket(key, NEWS_CODEC);
+        return bucket.get()
+                .doOnNext(newsResponse -> log.info("Noticia encontrada en Redis para fecha: {}", date));
+    }
+
+    @Override
     public Mono<Void> saveNews(String date, NewsResponse response) {
-        String key = KEY_NEWS_REDIS.formatted(date);
+        String key = getRedisKey(date);
         log.info("Guardando noticia en Redis con clave: {}", key);
 
         RBucketReactive<NewsResponse> bucket = this.client.getBucket(key, NEWS_CODEC);
         return bucket.set(response, Duration.ofHours(1L));
     }
+
+    private static String getRedisKey(String date) {
+        return KEY_NEWS_REDIS.formatted(date);
+    }
 }
 ````
 
-Explicación:
+🔎 Explicación de los elementos clave
 
-- `RedissonReactiveClient`: cliente reactivo de `Redisson` inyectado en el DAO.
-- `KEY_NEWS_REDIS`: plantilla de la clave que usaremos en Redis (`news:<fecha>`).
-- `TypedJsonJacksonCodec`: codec que permite `serializar/deserializar` `NewsResponse` en formato JSON.
-- `RBucketReactive`: una estructura de `Redis` para guardar un único objeto con `clave/valor`.
-- `bucket.set(response, Duration.ofHours(1L))`: guarda el valor con un `TTL (time-to-live)` de 1 hora.
+- `RedissonReactiveClient`
+    - Cliente reactivo de Redisson que permite operaciones no bloqueantes sobre Redis.
+    - Inyectado por constructor gracias a `@RequiredArgsConstructor`.
 
-Beneficios de esta implementación:
+- `KEY_NEWS_REDIS`
+    - Plantilla para construir las claves de Redis siguiendo el formato `news:<fecha>`.
+    - Facilita mantener consistencia en la nomenclatura de claves.
 
-- ✅ Totalmente reactiva → se integra de forma no bloqueante con WebFlux.
-- ✅ Uso de codec JSON → Redisson convierte el objeto automáticamente sin necesidad de manual mapping.
-- ✅ TTL configurado → los datos expiran después de 1 hora, garantizando frescura de la información.
+- `TypedJsonJacksonCodec`
+    - Codec que transforma automáticamente entre objetos `NewsResponse` y `JSON`.
+    - Evita tener que `serializar/deserializar` manualmente.
 
-📌 Resumen
+- `RBucketReactive`
+    - Estructura básica de Redis (clave/valor) adaptada a operaciones reactivas.
+    - Ideal para almacenar un único objeto asociado a cada clave.
 
-- Creamos un DAO reactivo para persistir noticias en Redis.
-- Usamos `RBucketReactive` porque se ajusta al patrón de guardar un único objeto por clave.
-- El `TypedJsonJacksonCodec` nos ahorra la conversión manual a JSON.
-- El `TTL` de 1 hora asegura que los datos cacheados no queden obsoletos.
+⚙️ Lógica de los métodos
+
+1. `getNews(String date)`
+    - Construye la clave Redis (`news:<fecha>`).
+    - Recupera el objeto asociado usando `RBucketReactive.get()`.
+    - Si encuentra datos, loggea el éxito.
+    - Retorna un `Mono<NewsResponse>` que puede estar vacío si no existe valor.
+2. `saveNews(String date, NewsResponse response)`
+    - Construye la clave Redis (`news:<fecha>`).
+    - Almacena la respuesta con un `TTL` de 1 hora (`Duration.ofHours(1L)`).
+    - Retorna `Mono<Void>` → solo indica `éxito/error`, no un valor.
 
 ## Definiendo Excepciones Personalizadas
 

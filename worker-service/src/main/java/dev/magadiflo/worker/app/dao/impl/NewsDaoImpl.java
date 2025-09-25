@@ -22,11 +22,25 @@ public class NewsDaoImpl implements NewsDao {
     private static final TypedJsonJacksonCodec NEWS_CODEC = new TypedJsonJacksonCodec(NewsResponse.class);
 
     @Override
+    public Mono<NewsResponse> getNews(String date) {
+        String key = getRedisKey(date);
+        log.info("Consultando noticia en Redis con clave: {}", key);
+
+        RBucketReactive<NewsResponse> bucket = this.client.getBucket(key, NEWS_CODEC);
+        return bucket.get()
+                .doOnNext(newsResponse -> log.info("Noticia encontrada en Redis para fecha: {}", date));
+    }
+
+    @Override
     public Mono<Void> saveNews(String date, NewsResponse response) {
-        String key = KEY_NEWS_REDIS.formatted(date);
+        String key = getRedisKey(date);
         log.info("Guardando noticia en Redis con clave: {}", key);
 
         RBucketReactive<NewsResponse> bucket = this.client.getBucket(key, NEWS_CODEC);
         return bucket.set(response, Duration.ofHours(1L));
+    }
+
+    private static String getRedisKey(String date) {
+        return KEY_NEWS_REDIS.formatted(date);
     }
 }
