@@ -1404,6 +1404,7 @@ public class Constants {
 
     public static final String TOPIC_NEWS = "news-topic";
     public static final String GROUP_ID_NEWS_TOPIC = "news-consumer-group";
+    public static final String DATA_NOT_FOUND_MESSAGE = "La noticia solicitada para la fecha [%s] no existe en el servicio externo";
 
 }
 ````
@@ -1619,3 +1620,68 @@ Beneficios de esta implementación:
 - Usamos `RBucketReactive` porque se ajusta al patrón de guardar un único objeto por clave.
 - El `TypedJsonJacksonCodec` nos ahorra la conversión manual a JSON.
 - El `TTL` de 1 hora asegura que los datos cacheados no queden obsoletos.
+
+## Definiendo Excepciones Personalizadas
+
+En este apartado definimos excepciones específicas que representen distintos escenarios de error al interactuar con el
+servicio externo de noticias (`mediastack`). Esto nos permitirá:
+
+- Tener mensajes de error más claros.
+- Identificar rápidamente la causa raíz del problema.
+- Integrar estas excepciones de manera fluida dentro de un flujo reactivo con `Mono.error()`.
+
+### Excepciones Personalizadas
+
+Cuando no se encuentra una noticia para una fecha dada:
+
+````java
+public class ExternalNewsNotFoundException extends RuntimeException {
+    public ExternalNewsNotFoundException(String date) {
+        super(Constants.DATA_NOT_FOUND_MESSAGE.formatted(date));
+    }
+}
+````
+
+Cuando la petición al servicio externo es inválida (ejemplo: parámetros incorrectos):
+
+````java
+public class ExternalInvalidNewsRequestException extends RuntimeException {
+    public ExternalInvalidNewsRequestException(String message) {
+        super(message);
+    }
+}
+````
+
+Cuando ocurre un error genérico en el servicio externo (timeouts, 5xx, etc.):
+
+````java
+public class ExternalServiceException extends RuntimeException {
+    public ExternalServiceException(String message) {
+        super(message);
+    }
+}
+````
+
+### Clase de Utilidad para Errores Reactivos
+
+En aplicaciones reactivas (`WebFlux`) es común propagar errores dentro de un flujo (`Mono` o `Flux`).
+Para evitar repetir `Mono.error(new MiExcepcion(...))` en todo el código, centralizamos esa lógica en una clase de
+utilidad:
+
+````java
+
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public class ApplicationExceptions {
+    public static <T> Mono<T> externalNewsNotFound(String date) {
+        return Mono.error(() -> new ExternalNewsNotFoundException(date));
+    }
+
+    public static <T> Mono<T> externalInvalidNewsRequest(String message) {
+        return Mono.error(() -> new ExternalInvalidNewsRequestException(message));
+    }
+
+    public static <T> Mono<T> externalServiceError(String message) {
+        return Mono.error(() -> new ExternalServiceException(message));
+    }
+}
+````
