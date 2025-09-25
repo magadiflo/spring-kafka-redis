@@ -1806,3 +1806,50 @@ public class MediaStackServiceClient {
 - Incluye manejo de errores robusto con excepciones personalizadas.
 - Es el punto central de integración con el servicio externo y será usado más adelante por la lógica de negocio del
   `worker-service`.
+
+## Implementando Listener `NewsKafkaConsumer`
+
+La clase `NewsKafkaConsumer` es el componente encargado de consumir mensajes desde `Kafka`. Cada mensaje contiene una
+fecha (`String date`) que representa la consulta de noticias a procesar.
+
+````java
+
+@Slf4j
+@RequiredArgsConstructor
+@Component
+public class NewsKafkaConsumer {
+
+    private final MediaStackServiceClient externalClient;
+    private final NewsDao newsDao;
+
+    @KafkaListener(topics = Constants.TOPIC_NEWS, groupId = Constants.GROUP_ID_NEWS_TOPIC)
+    public void consumeDateToSearchNews(String date) {
+
+        log.info("Recibiendo fecha desde Kafka: {}", date);
+
+        this.newsDao.getNews(date)
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("No existe noticia en Redis para fecha: {}, consultando API externa", date);
+                    return this.externalClient.getNews(date)
+                            .flatMap(newsResponse -> this.newsDao.saveNews(date, newsResponse)
+                                    .thenReturn(newsResponse));
+                }))
+                .doOnNext(newsResponse -> log.info("Procesamiento completado exitosamente para fecha: {}", date))
+                .doOnError(throwable -> log.error("Error procesando fecha {}: {}", date, throwable.getMessage()))
+                .subscribe();
+    }
+}
+````
+
+Flujo de trabajo:
+
+1. `Kafka → Worker`: se recibe la fecha desde el tópico `news-topic`.
+2. `Redis (cache lookup)`: se consulta si ya existe una noticia en `Redis` para esa fecha.
+3. `API externa (fallback)`:
+    - Si no existe en Redis, se consulta la API externa (MediaStack).
+    - Una vez obtenida, se guarda en Redis con TTL de 1 hora.
+4. `Logs y manejo de errores`:
+    - Se registran logs en cada paso.
+    - Cualquier excepción se captura y se loguea.
+5. `Suscripción (subscribe())`: necesaria para ejecutar el flujo reactivo, ya que `@KafkaListener` espera un void y no
+   gestiona el `Publisher`.
