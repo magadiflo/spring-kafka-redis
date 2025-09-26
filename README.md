@@ -994,6 +994,8 @@ services:
     image: apache/kafka:4.1.0
     container_name: c-kafka
     restart: unless-stopped
+    ports:
+      - '9092:9092'
     environment:
       # Settings required for KRaft mode
       KAFKA_NODE_ID: 1
@@ -1008,8 +1010,6 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
       # Required for a single node cluster
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    ports:
-      - '9092:9092'
 ````
 
 - `KAFKA_NODE_ID: 1`. Identificador único del nodo Kafka en el clúster. En modo `KRaft`, cada nodo debe tener un ID
@@ -2137,3 +2137,393 @@ $ curl -v http://localhost:8080/api/v1/news?date=2025-09-23 | jq
     - `worker-service` → procesa asincrónicamente, consulta `MediaStack` y persiste en `Redis`.
 - `Redis` actúa como cache con TTL, optimizando futuras consultas.
 - `Kafka` asegura la comunicación confiable entre microservicios.
+
+## 🐳 Dockerizando los microservicios news-service y worker-service
+
+Para desplegar nuestros microservicios en contenedores, necesitamos crear un `Dockerfile` en la raíz de cada proyecto
+(`news-service` y `worker-service`). La idea es usar un `build` `multi-stage` para optimizar la construcción y
+reducir el tamaño final de la imagen.
+
+### 📄 Dockerfile
+
+````dockerfile
+FROM eclipse-temurin:21-jdk-alpine AS dependencies
+WORKDIR /app
+COPY ./mvnw ./
+COPY ./.mvn ./.mvn
+COPY ./pom.xml ./
+
+RUN sed -i -e 's/\r$//' ./mvnw
+RUN ./mvnw dependency:go-offline
+
+COPY ./src ./src
+RUN ./mvnw clean package -DskipTests
+
+FROM eclipse-temurin:21-jre-alpine AS builder
+WORKDIR /app
+COPY --from=dependencies /app/target/*.jar ./app.jar
+RUN java -Djarmode=layertools -jar app.jar extract
+
+FROM eclipse-temurin:21-jre-alpine AS runner
+WORKDIR /app
+COPY --from=builder /app/dependencies ./
+COPY --from=builder /app/spring-boot-loader ./
+COPY --from=builder /app/snapshot-dependencies ./
+COPY --from=builder /app/application ./
+
+CMD ["java", "org.springframework.boot.loader.launch.JarLauncher"]
+````
+
+✅ Beneficios de esta estrategia
+
+1. `Multi-stage build`
+    - Separamos la fase de construcción de la de ejecución.
+    - La imagen final contiene únicamente el JRE y los archivos del microservicio → más ligera y segura.
+2. `Uso de layertools`
+    - `Spring Boot 2.3+` permite dividir el fat JAR en capas (`dependencies`, `snapshot-dependencies`,
+      `spring-boot-loader`, `application`).
+    - Esto mejora la cacheabilidad en Docker → solo cambia la capa de application cuando modificamos el código.
+3. `Optimización de espacio y tiempo de build`
+    - Dependencias se descargan en la primera etapa y permanecen cacheadas entre builds.
+    - Las imágenes finales ocupan menos espacio y se reconstruyen más rápido.
+
+## 🚀 Orquestando microservicios e infraestructura con Docker Compose
+
+En esta sección, extendemos nuestro archivo `compose.yml` para incluir los microservicios `news-service` y
+`worker-service`. Ambos se desplegarán junto con las dependencias `Redis` y `Kafka`, compartiendo una red definida
+en el bloque networks. Esto permite que cada servicio se comunique con los demás utilizando el nombre del servicio
+como host, en lugar de `localhost`.
+
+> ⚠️ `Nota`: A diferencia de `news-service`, el `worker-service` no necesita exponer puertos al host, ya que no provee
+> un API REST. Su función es escuchar fechas desde `Kafka`, procesarlas y almacenar resultados en `Redis`.
+
+````yml
+services:
+  s-redis:
+    image: redis:8.0.3-alpine
+    container_name: c-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    command: [ "--user userdev >pass123 on allcommands allkeys", "--user default off" ]
+    networks:
+      - kafka-redis-net
+
+  s-kafka:
+    image: apache/kafka:4.1.0
+    container_name: c-kafka
+    restart: unless-stopped
+    ports:
+      - '9092:9092'
+    environment:
+      # Settings required for KRaft mode
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9091
+      # Configure listeners for both docker and host communication
+      KAFKA_LISTENERS: CONTROLLER://localhost:9091,HOST://0.0.0.0:9092,DOCKER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://s-kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,DOCKER:PLAINTEXT,HOST:PLAINTEXT
+      # Listener to use for broker-to-broker communication
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      # Required for a single node cluster
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - kafka-redis-net
+
+  s-news-service:
+    build:
+      context: ./../news-service
+    image: news-service:latest
+    container_name: c-news-service
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: s-kafka:9093
+      REDIS_HOST: s-redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: userdev
+      REDIS_PASSWORD: pass123
+    networks:
+      - kafka-redis-net
+    depends_on:
+      - s-kafka
+      - s-redis
+
+  s-worker-service:
+    build:
+      context: ./../worker-service
+    image: worker-service:latest
+    container_name: c-worker-service
+    restart: unless-stopped
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: s-kafka:9093
+      REDIS_HOST: s-redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: userdev
+      REDIS_PASSWORD: pass123
+    networks:
+      - kafka-redis-net
+    depends_on:
+      - s-kafka
+      - s-redis
+
+networks:
+  kafka-redis-net:
+    name: kafka-redis-net
+````
+
+## 🚀 Construcción y despliegue de los microservicios con Docker Compose
+
+Ejecutamos el siguiente comando para levantar los contenedores. Como aún no existen las imágenes de `news-service` y
+`worker-service` en el repositorio local, `Docker Compose` detectará esta situación y construirá automáticamente
+ambas imágenes utilizando el `Dockerfile` de cada microservicio:
+
+````bash
+D:\programming\spring\02.youtube\09.dev_dominio\spring-kafka-redis (main -> origin)                                                                                             
+$ docker compose -f ./docker/compose.yml up -d                                                                                                                                  
+[+] Running 2/2                                                                                                                                                                 
+ ! s-worker-service Warning pull access denied for worker-service, repository does not exist or may require 'docker login': denied: requested access to the resource is denied  
+ ! s-news-service Warning   pull access denied for news-service, repository does not exist or may require 'docker login': denied: requested access to the resource is denied    
+[+] Building 2.1s (44/44) FINISHED                                                                                                                                              
+ => [internal] load local bake definitions                                                                                                                                                                                                                                                                              
+...                                                                                            
+ => [s-news-service] exporting to image                                                                                                                                         
+ => => exporting layers                                                                                                                                                         
+ => => writing image sha256:6c3f56b31810eacddd9a22019db297c90504017b38239369963d688aeddb5780                                                                                    
+ => => naming to docker.io/library/news-service:latest                                                                                                                          
+ => [s-worker-service] exporting to image                                                                                                                                       
+ => => exporting layers                                                                                                                                                         
+ => => writing image sha256:0644d0cf101a7c3758fcd740003c102bb6f1203a2b9f9aa96dfce3a26d144f19                                                                                    
+ => => naming to docker.io/library/worker-service:latest                                                                                                                        
+ => [s-news-service] resolving provenance for metadata file                                                                                                                     
+ => [s-worker-service] resolving provenance for metadata file                                                                                                                   
+[+] Running 7/7                                                                                                                                                                 
+ ✔ worker-service:latest       Built                                                                                                                                            
+ ✔ news-service:latest         Built                                                                                                                                            
+ ✔ Network kafka-redis-net     Created                                                                                                                                          
+ ✔ Container c-kafka           Started                                                                                                                                          
+ ✔ Container c-redis           Started                                                                                                                                          
+ ✔ Container c-worker-service  Started                                                                                                                                          
+ ✔ Container c-news-service    Started                                                                                                                                                                                                                                                                               
+````
+
+✅ En este proceso se puede observar que:
+
+- `news-service` y `worker-service` fueron construidos localmente (imágenes generadas con `:latest`).
+- Se levantaron correctamente los contenedores de `Redis` y `Kafka`.
+- La red `kafka-redis-net` fue creada y ambos microservicios están conectados a ella.
+
+### 📦 Verificación de contenedores en ejecución
+
+Listamos los contenedores activos para comprobar que todos los servicios se están ejecutando:
+
+````bash
+$ docker container ls -a
+CONTAINER ID   IMAGE                   COMMAND                  CREATED         STATUS         PORTS                                         NAMES
+3347de6e231a   news-service:latest     "/__cacert_entrypoin…"   2 minutes ago   Up 2 minutes   0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp   c-news-service
+a25f5683f802   worker-service:latest   "/__cacert_entrypoin…"   2 minutes ago   Up 2 minutes                                                 c-worker-service
+46e9bbba9c59   redis:8.0.3-alpine      "docker-entrypoint.s…"   2 minutes ago   Up 2 minutes   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp   c-redis
+0e9e6feb455f   apache/kafka:4.1.0      "/__cacert_entrypoin…"   2 minutes ago   Up 2 minutes   0.0.0.0:9092->9092/tcp, [::]:9092->9092/tcp   c-kafka
+````
+
+🔍 Notas importantes:
+
+- El contenedor `c-news-service` expone el puerto 8080, ya que ofrece un API REST para interactuar con el cliente.
+- El contenedor `c-worker-service` no expone puertos porque no recibe peticiones externas: su única función es consumir
+  mensajes desde `Kafka`, consultar el servicio externo y persistir los resultados en `Redis`.
+
+## ✅ Verificación del flujo completo en contenedores (Prueba E2E)
+
+Con los microservicios `news-service` y `worker-service` ejecutándose en contenedores, junto a `Redis` y `Kafka`,
+probamos la interacción `end-to-end` consultando noticias.
+
+### 1. Primera petición (cache miss)
+
+Al solicitar la noticia para la fecha `2025-09-24`, el `news-service` no encuentra datos en `Redis`, por lo que:
+
+- Publica la fecha en el tópico `news-topic` de `Kafka`.
+- Devuelve un `404 Not Found` al cliente indicando que la noticia aún no está disponible.
+
+````bash
+$ curl -v http://localhost:8080/api/v1/news?date=2025-09-24 | jq
+>
+< HTTP/1.1 404 Not Found
+< Content-Type: application/json
+< Content-Length: 261
+<
+{
+  "code": "NEWS_MS_201",
+  "message": "Noticia no encontrada",
+  "errorType": "FUNCTIONAL",
+  "details": [
+    "La noticia solicitada para la fecha [2025-09-24] aún no está disponible. Por favor, intente nuevamente en unos momentos"
+  ],
+  "timestamp": "2025-09-26T03:57:47.729453927"
+}
+````
+
+📌 Aquí entra en acción el `worker-service`, que consume el mensaje de `Kafka`, consulta la API externa de `MediaStack` y
+persiste la respuesta en `Redis`.
+
+### 2. Segunda petición (cache hit)
+
+Tras unos segundos, volvemos a consultar la misma fecha. Esta vez, los datos ya están disponibles en `Redis`:
+
+- El `news-service` recupera la noticia directamente desde el cache.
+- Devuelve un `200 OK` con la información completa.
+
+````bash
+$ curl -v http://localhost:8080/api/v1/news?date=2025-09-24 | jq
+>
+< HTTP/1.1 200 OK
+< Content-Type: application/json
+< Content-Length: 3923
+<
+{
+  "message": "Datos encontrados",
+  "status": true,
+  "data": {
+    "pagination": {
+      "limit": 5,
+      "offset": 0,
+      "count": 5,
+      "total": 235
+    },
+    "data": [
+      {
+        "author": "Redacción EC",
+        "title": "Perumin 37: Cerro Verde invertirá US$2.000 millones para operar hasta el 2053 y proyecta ampliar La Enlozada al 2060",
+        "description": "Durante el segundo día de la Cumbre Minera en Perumin 37, el CEO de Sociedad Minera Cerro Verde, Derek Cooke, informó que trabajan en la Segunda Modificación del Estudio de Impacto Ambiental y Social (II MEIAS) para garantizar su operatividad hasta el 2053.",
+        "url": "https://elcomercio.pe/economia/peru/perumin-37-cerro-verde-alista-ii-meias-y-ampliacion-de-la-enlozada-para-extender-operaciones-hasta-el-2060-l-ultimas-noticia/",
+        "source": "elcomercio",
+        "image": "https://elcomercio.pe/resizer/v2/UR6JMRVTEVGORPYEM5AIZPU7SQ.gif?width=1200&height=800&auth=f207e9cdb9ff52a53c33aefbc27fe794eb249be6d8443a626d6773ac2d4d736b&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-24T23:57:17+00:00"
+      },
+      {
+        "author": "Redacción EC",
+        "title": "Shakira y Beéle sorprenden bailando y avivan rumores de colaboración musical",
+        "description": "En un estudio de grabación, Beéle compartió un video en sus redes sociales bailando con Shakira, a quien sujetaba por la cintura",
+        "url": "https://elcomercio.pe/tvmas/famosos/shakira-y-beele-sorprenden-bailando-y-avivan-rumores-de-colaboracion-musical-noticia/",
+        "source": "elcomercio",
+        "image": "https://elcomercio.pe/resizer/v2/OAX5PVNCDJHZXFOKRDHVY2G5GY.png?width=1280&height=800&auth=e706a5cd19a7a8bb86b745e57ebb585c297295ab5a43be0a87473f140dd0fb7a&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-24T23:48:27+00:00"
+      },
+      {
+        "author": "Jorge Villanes",
+        "title": "Después de 30 años viviendo en Estados Unidos, un chef mexicano decide regresar a su tierra: “no hay como estar acá”",
+        "description": "Después de 30 años viviendo en Estados Unidos, un chef mexicano decide regresar a su tierra: “no hay como estar acá”",
+        "url": "https://elcomercio.pe/mag/usa/local-us/despues-de-30-anos-viviendo-en-estados-unidos-un-chef-mexicano-decide-regresar-a-su-tierra-nnda-nnrt-noticia/",
+        "source": "elcomercio",
+        "image": "https://elcomercio.pe/resizer/v2/6MZNMFFLW5GWTOL4GONS5BF4OI.jpg?width=1200&height=750&auth=bc004ec019c605d7fa7dbc9e00230f884a030c7a21e5b47bd6d1ded5fb4f4cf1&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-24T23:43:18+00:00"
+      },
+      {
+        "author": "Renato Cardenas C.",
+        "title": "◉ TUDN y Canal 5 EN VIVO - ver partido Club América vs. San Luis por TV abierta y Online",
+        "description": "◉ TUDN y Canal 5 EN VIVO - ver partido Club América vs. San Luis por TV abierta y Online",
+        "url": "https://elcomercio.pe/mag/usa/en-vivo-us/tudn-y-canal-5-en-vivo-gratis-donde-ver-partido-club-america-vs-atletico-san-luis-por-tv-abierta-y-futbol-online-nnda-nnse-noticia/",
+        "source": "elcomercio",
+        "image": "https://elcomercio.pe/resizer/v2/6VCP2Y4CFNF4LLH4RPRFKLU6KQ.jpg?width=2400&height=1620&auth=5b46ba986bdf2952f9988e560a7971a414568b07bb6f3b27994c56c0efd30f44&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-24T23:36:19+00:00"
+      },
+      {
+        "author": "Agencia AFP",
+        "title": "Temblor de magnitud 6,2 sacude occidente de Venezuela",
+        "description": "Un sismo de magnitud 6,2 sacudió a Caracas y buena parte del occidente de Venezuela en la tarde de este miércoles, sin que se reportaran de inmediato daños materiales o víctimas.",
+        "url": "https://elcomercio.pe/mundo/venezuela/temblor-en-venezuela-de-magnitud-62-maracaibo-caracas-mene-grande-zulia-terremoto-nicolas-maduro-usgs-ultimas-noticia/",
+        "source": "elcomercio",
+        "image": "https://elcomercio.pe/resizer/v2/4AXNVXAQSVG6FEMBLPY5OQVZ3Y.png?width=1200&height=706&auth=483459607af3567b09de13ee58b7dd8c2cc40f5c2d69b1e59ddd56b83e30240d&smart=true",
+        "category": "general",
+        "language": "es",
+        "country": "pe",
+        "published_at": "2025-09-24T23:33:15+00:00"
+      }
+    ]
+  }
+}
+````
+
+### 🔎 Conclusión
+
+- La primera petición activa el flujo `Kafka → Worker-Service → API externa → Redis`.
+- La segunda petición demuestra que los datos fueron almacenados en `Redis` y se devuelven sin necesidad de ir
+  nuevamente al servicio externo.
+- Se confirma el correcto funcionamiento del sistema de noticias en modo contenedores.
+
+## 📄 Verificación Final mediante Logs
+
+Para confirmar el correcto funcionamiento de todo el flujo, revisamos los logs de los contenedores `c-news-service` y
+`c-worker-service`.
+
+### Logs de c-news-service
+
+En el log del contenedor `c-news-service` observamos:
+
+````bash
+$ docker container logs c-news-service
+...
+2025-09-26T03:51:40.239Z  INFO 1 --- [news-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka version: 3.9.1
+2025-09-26T03:51:40.241Z  INFO 1 --- [news-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka commitId: f745dfdcee2b9851
+2025-09-26T03:51:40.242Z  INFO 1 --- [news-service] [           main] o.a.kafka.common.utils.AppInfoParser     : Kafka startTimeMs: 1758858700237
+2025-09-26T03:51:41.045Z  INFO 1 --- [news-service] [service-admin-0] o.a.kafka.common.utils.AppInfoParser     : App info kafka.admin.client for news-service-admin-0 unregistered
+2025-09-26T03:51:41.073Z  INFO 1 --- [news-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Metrics scheduler closed
+2025-09-26T03:51:41.073Z  INFO 1 --- [news-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Closing reporter org.apache.kafka.common.metrics.JmxReporter
+2025-09-26T03:51:41.074Z  INFO 1 --- [news-service] [service-admin-0] o.apache.kafka.common.metrics.Metrics    : Metrics reporters closed
+2025-09-26T03:51:41.209Z  INFO 1 --- [news-service] [           main] o.s.b.web.embedded.netty.NettyWebServer  : Netty started on port 8080 (http)
+2025-09-26T03:51:41.225Z  INFO 1 --- [news-service] [           main] d.m.news.app.NewsServiceApplication      : Started NewsServiceApplication in 6.919 seconds (process running for 7.846)
+2025-09-26T03:57:47.446Z  INFO 1 --- [news-service] [llEventLoop-7-1] d.m.n.app.service.impl.NewsServiceImpl   : Cache MISS - Publicando fecha 2025-09-24 en Kafka
+...
+2025-09-26T03:57:47.726Z ERROR 1 --- [news-service] [vice-producer-1] d.m.n.app.advice.GlobalExceptionHandler  : La noticia solicitada para la fecha [2025-09-24] aún no está disponible. Por favor, intente nuevamente en unos momentos
+2025-09-26T03:58:12.222Z  INFO 1 --- [news-service] [llEventLoop-7-1] d.m.n.app.service.impl.NewsServiceImpl   : Cache HIT - Obteniendo desde Redis para fecha: NewsResponse[pagination=Pagination[limit=5, offset=0, count=5, total=235], items=[NewsItem[author=Redacción EC, title=Perumin 37: Cerro Verde invertirá US$2.000 millones para operar hasta el 2053 y proyecta ampliar La Enlozada al 2060, description=Durante el segundo día de la Cumbre Minera en Perumin 37, el CEO de Sociedad Minera Cerro Verde, Derek Cooke, informó que trabajan en la Segunda Modificación del Estudio de Impacto Ambiental y Social (II MEIAS) para garantizar su operatividad hasta el 2053., url=https://elcomercio.pe/economia/peru/perumin-37-cerro-verde-alista-ii-meias-y-ampliacion-de-la-enlozada-para-extender-operaciones-hasta-el-2060-l-ultimas-noticia/, source=elcomercio, image=https://elcomercio.pe/resizer/v2/UR6JMRVTEVGORPYEM5AIZPU7SQ.gif?width=1200&height=800&auth=f207e9cdb9ff52a53c33aefbc27fe794eb249be6d8443a626d6773ac2d4d736b&smart=true, category=general, language=es, country=pe, publishedAt=2025-09-24T23:57:17+00:00], NewsItem[author=Redacción EC, title=Shakira y Beéle sorprenden bailando y avivan rumores de colaboración musical, description=En un estudio de grabación, Beéle compartió un video en sus redes sociales bailando con Shakira, a quien sujetaba por la cintura, url=https://elcomercio.pe/tvmas/famosos/shakira-y-beele-sorprenden-bailando-y-avivan-rumores-de-colaboracion-musical-noticia/, source=elcomercio, image=https://elcomercio.pe/resizer/v2/OAX5PVNCDJHZXFOKRDHVY2G5GY.png?width=1280&height=800&auth=e706a5cd19a7a8bb86b745e57ebb585c297295ab5a43be0a87473f140dd0fb7a&smart=true, category=general, language=es, country=pe, publishedAt=2025-09-24T23:48:27+00:00], NewsItem[author=Jorge Villanes, title=Después de 30 años viviendo en Estados Unidos, un chef mexicano decide regresar a su tierra: “no hay como estar acá”, description=Después de 30 años viviendo en Estados Unidos, un chef mexicano decide regresar a su tierra: “no hay como estar acá”, url=https://elcomercio.pe/mag/usa/local-us/despues-de-30-anos-viviendo-en-estados-unidos-un-chef-mexicano-decide-regresar-a-su-tierra-nnda-nnrt-noticia/, source=elcomercio, image=https://elcomercio.pe/resizer/v2/6MZNMFFLW5GWTOL4GONS5BF4OI.jpg?width=1200&height=750&auth=bc004ec019c605d7fa7dbc9e00230f884a030c7a21e5b47bd6d1ded5fb4f4cf1&smart=true, category=general, language=es, country=pe, publishedAt=2025-09-24T23:43:18+00:00], NewsItem[author=Renato Cardenas C., title=◉ TUDN y Canal 5 EN VIVO - ver partido Club América vs. San Luis por TV abierta y Online, description=◉ TUDN y Canal 5 EN VIVO - ver partido Club América vs. San Luis por TV abierta y Online, url=https://elcomercio.pe/mag/usa/en-vivo-us/tudn-y-canal-5-en-vivo-gratis-donde-ver-partido-club-america-vs-atletico-san-luis-por-tv-abierta-y-futbol-online-nnda-nnse-noticia/, source=elcomercio, image=https://elcomercio.pe/resizer/v2/6VCP2Y4CFNF4LLH4RPRFKLU6KQ.jpg?width=2400&height=1620&auth=5b46ba986bdf2952f9988e560a7971a414568b07bb6f3b27994c56c0efd30f44&smart=true, category=general, language=es, country=pe, publishedAt=2025-09-24T23:36:19+00:00], NewsItem[author=Agencia AFP, title=Temblor de magnitud 6,2 sacude occidente de Venezuela, description=Un sismo de magnitud 6,2 sacudió a Caracas y buena parte del occidente de Venezuela en la tarde de este miércoles, sin que se reportaran de inmediato daños materiales o víctimas., url=https://elcomercio.pe/mundo/venezuela/temblor-en-venezuela-de-magnitud-62-maracaibo-caracas-mene-grande-zulia-terremoto-nicolas-maduro-usgs-ultimas-noticia/, source=elcomercio, image=https://elcomercio.pe/resizer/v2/4AXNVXAQSVG6FEMBLPY5OQVZ3Y.png?width=1200&height=706&auth=483459607af3567b09de13ee58b7dd8c2cc40f5c2d69b1e59ddd56b83e30240d&smart=true, category=general, language=es, country=pe, publishedAt=2025-09-24T23:33:15+00:00]]] 
+````
+
+Interpretación:
+
+1. `Cache MISS` → la noticia para la fecha 2025-09-24 no estaba en Redis, por lo que el servicio la publica en Kafka
+   para que el worker la procese.
+2. `Error funcional` → se notifica al cliente que la noticia aún no está disponible.
+3. `Cache HIT` → en la segunda consulta, la noticia ya está en Redis y puede ser devuelta rápidamente.
+
+### Logs de c-worker-service
+
+En el log del contenedor `c-worker-service` observamos:
+
+````bash
+$ docker container logs c-worker-service
+...
+2025-09-26T03:51:38.372Z  INFO 1 --- [worker-service] [           main] org.redisson.Version                     : Redisson 3.51.0
+2025-09-26T03:51:39.089Z  INFO 1 --- [worker-service] [isson-netty-3-6] o.redisson.connection.ConnectionsHolder  : 1 connections initialized for s-redis/172.18.0.2:6379
+2025-09-26T03:51:39.354Z  INFO 1 --- [worker-service] [sson-netty-3-20] o.redisson.connection.ConnectionsHolder  : 24 connections initialized for s-redis/172.18.0.2:6379
+...
+2025-09-26T03:51:46.244Z  INFO 1 --- [worker-service] [ntainer#0-0-C-1] o.a.k.c.c.internals.SubscriptionState    : [Consumer clientId=consumer-news-consumer-group-1, groupId=news-consumer-group] Resetting offset for partition news-topic-0 to position FetchPosition{offset=0, offsetEpoch=Optional.empty, currentLeader=LeaderAndEpoch{leader=Optional[s-kafka:9093 (id: 1 rack: null)], epoch=0}}.
+2025-09-26T03:51:46.275Z  INFO 1 --- [worker-service] [ntainer#0-0-C-1] o.s.k.l.KafkaMessageListenerContainer    : news-consumer-group: partitions assigned: [news-topic-0]
+2025-09-26T03:57:47.740Z  INFO 1 --- [worker-service] [ntainer#0-0-C-1] d.m.w.app.listener.NewsKafkaConsumer     : Recibiendo fecha desde Kafka: 2025-09-24
+2025-09-26T03:57:47.741Z  INFO 1 --- [worker-service] [ntainer#0-0-C-1] d.m.worker.app.dao.impl.NewsDaoImpl      : Consultando noticia en Redis con clave: news:2025-09-24
+2025-09-26T03:57:47.766Z  INFO 1 --- [worker-service] [isson-netty-3-3] d.m.w.app.listener.NewsKafkaConsumer     : No existe noticia en Redis para fecha: 2025-09-24, consultando API externa
+2025-09-26T03:57:47.766Z  INFO 1 --- [worker-service] [isson-netty-3-3] d.m.w.a.client.MediaStackServiceClient   : Consultando noticias en MediaStack para la fecha: 2025-09-24
+2025-09-26T03:57:49.281Z  INFO 1 --- [worker-service] [or-http-epoll-3] d.m.worker.app.dao.impl.NewsDaoImpl      : Guardando noticia en Redis con clave: news:2025-09-24
+2025-09-26T03:57:49.297Z  INFO 1 --- [worker-service] [isson-netty-3-7] d.m.w.app.listener.NewsKafkaConsumer     : Procesamiento completado exitosamente para fecha: 2025-09-24
+````
+
+Interpretación:
+
+1. El worker recibe la fecha desde Kafka.
+2. Intenta consultar Redis, pero la clave no existe.
+3. Llama a la API externa MediaStack y obtiene las noticias.
+4. Guarda el resultado en Redis.
+5. Finaliza el proceso exitosamente.
